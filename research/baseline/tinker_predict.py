@@ -2,8 +2,6 @@
 
     uv sync --extra tinker
     uv run baseline/tinker_predict.py --out-dir submissions/qwen38-27b --base-model Qwen/Qwen3.8-27B --ids 13-1,51-12
-    uv run baseline/tinker_predict.py --out-dir submissions/qwen38-27b --base-model Qwen/Qwen3.8-27B \
-        --renderer qwen3_8_disable_thinking --ids 13-1,51-12
     uv run baseline/tinker_predict.py --out-dir submissions/mine --base-model Qwen/Qwen3.8-27B \
         --model-path tinker://<run-id>/sampler_weights/final
 
@@ -34,10 +32,10 @@ def parse_args() -> argparse.Namespace:
     p.add_argument("--model-path", help="tinker://... sampler checkpoint. Omit to sample the base model.")
     p.add_argument(
         "--renderer",
-        help="override chat renderer (e.g. qwen3_8_disable_thinking). Default: model recommended.",
+        help="override chat renderer. Default: cookbook recommended (qwen3_8_xhigh_reasoning for Qwen3.8).",
     )
     p.add_argument("--concurrency", type=int, default=4)
-    p.add_argument("--max-tokens", type=int, default=8192, help="sheet-level tasks need long replies")
+    p.add_argument("--max-tokens", type=int, default=16384, help="xhigh reasoning + sheet JSON need headroom")
     p.add_argument("--resume", action="store_true", help="skip ids already in predictions.jsonl")
     return p.parse_args()
 
@@ -46,12 +44,7 @@ async def main():
     load_env()
     args = parse_args()
     sampler = tinker.ServiceClient().create_sampling_client(base_model=args.base_model, model_path=args.model_path)
-    default_renderer = (
-        "qwen3_8_disable_thinking"
-        if "Qwen3.8" in args.base_model
-        else get_recommended_renderer_name(args.base_model)
-    )
-    renderer_name = args.renderer or default_renderer
+    renderer_name = args.renderer or get_recommended_renderer_name(args.base_model)
     renderer = renderers.get_renderer(renderer_name, get_tokenizer(args.base_model))
     params = types.SamplingParams(max_tokens=args.max_tokens, temperature=0, stop=renderer.get_stop_sequences())
 

@@ -22,7 +22,7 @@ from sb import DEFAULT_DATASET
 from train.paths import EVAL_IDS, ROOT
 
 DEFAULT_MODEL = "Qwen/Qwen3.8-27B"
-DEFAULT_RENDERER = "qwen3_8_disable_thinking"
+DEFAULT_RENDERER = "qwen3_8_xhigh_reasoning"
 
 
 def parse_args() -> argparse.Namespace:
@@ -36,7 +36,7 @@ def parse_args() -> argparse.Namespace:
     p.add_argument("--ids", help="comma-separated ids (overrides --ids-file)")
     p.add_argument("--all", action="store_true", help="run every task in the dataset")
     p.add_argument("--concurrency", type=int, default=4)
-    p.add_argument("--max-tokens", type=int, default=8192)
+    p.add_argument("--max-tokens", type=int, default=16384)
     p.add_argument("--results", help="write evaluate.py JSON here")
     p.add_argument("--no-recalc", action="store_true")
     p.add_argument("--resume", action="store_true")

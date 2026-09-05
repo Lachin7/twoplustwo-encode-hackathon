@@ -21,7 +21,7 @@ from train.paths import ROOT, SPLIT_META
 from train.spreadsheet_env import SpreadsheetDatasetBuilder
 
 DEFAULT_MODEL = "Qwen/Qwen3.8-27B"
-DEFAULT_RENDERER = "qwen3_8_disable_thinking"
+DEFAULT_RENDERER = "qwen3_8_xhigh_reasoning"
 
 
 def parse_args() -> argparse.Namespace:
@@ -35,7 +35,7 @@ def parse_args() -> argparse.Namespace:
     p.add_argument("--lr", type=float, default=2e-5)
     p.add_argument("--groups-per-batch", type=int, default=16)
     p.add_argument("--group-size", type=int, default=4)
-    p.add_argument("--max-tokens", type=int, default=8192)
+    p.add_argument("--max-tokens", type=int, default=16384)
     p.add_argument("--max-steps", type=int, default=50)
     p.add_argument("--recalc", action="store_true")
     p.add_argument("--log-path", default=str(ROOT / "train" / "logs" / "rl"))

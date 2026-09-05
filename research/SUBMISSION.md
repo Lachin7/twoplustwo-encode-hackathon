@@ -11,7 +11,7 @@ Research track. Primary local metric is the frozen **eval-80** holdout. Full-400
 
 ## What we built and why
 
-We treat SpreadsheetBench as fill-the-graded-cells, not rebuild-the-workbook. The one-shot baseline already tells the model the answer range and asks for JSON values. We kept that contract and hardened the harness (coerce, align to `answer_position`, retry on bad JSON, skip huge ranges, pin `qwen3_8_disable_thinking`).
+We treat SpreadsheetBench as fill-the-graded-cells, not rebuild-the-workbook. The one-shot baseline already tells the model the answer range and asks for JSON values. We kept that contract and hardened the harness (coerce, align to `answer_position`, retry on bad JSON, pin cookbook recommended `qwen3_8_xhigh_reasoning`).
 
 Training uses a frozen 320/80 split (`data/splits/`, seed 42). Train-small (≤200 graded cells) is the SFT set; huge tasks stay on harness fallback. Primary SFT is **oracle** (golden JSON as assistant; **no goldens in the user prompt**). Optional Gemini teacher via Google AI Studio (`GOOGLE_API_KEY`) can replace/filter traces with pass-only keeps (`train/scripts/`).
 
@@ -19,7 +19,7 @@ Inference: `baseline/tinker_predict.py` / `train/run_infer.py`. Env: `TINKER_API
 
 ## Models
 
-- Base / student: `Qwen/Qwen3.8-27B` on Tinker, renderer `qwen3_8_disable_thinking`
+- Base / student: `Qwen/Qwen3.8-27B` on Tinker, renderer `qwen3_8_xhigh_reasoning`
 - **Shipped SFT (use this):** `tinker://6fddcac0-b2a6-545a-b7e4-b3886d94d9d6:train:0/sampler_weights/final`  
   Oracle LoRA, rank 32, lr 4e-4, batch 8, max_length 16384, 1 epoch (`train/sft_tinker.py` defaults)
 - Do **not** use `train/logs/sft2` / windowed oracle — that run is **worse than base** (~27.5% on eval-80)
@@ -101,7 +101,7 @@ Full 400 (costly): `uv run train/run_infer.py --all --resume --out-dir ship --mo
 
 ```sh
 uv run baseline/tinker_predict.py --dataset-dir /data --out-dir /out \
-  --base-model Qwen/Qwen3.8-27B --renderer qwen3_8_disable_thinking \
+  --base-model Qwen/Qwen3.8-27B --renderer qwen3_8_xhigh_reasoning \
   --model-path tinker://6fddcac0-b2a6-545a-b7e4-b3886d94d9d6:train:0/sampler_weights/final
 ```
 

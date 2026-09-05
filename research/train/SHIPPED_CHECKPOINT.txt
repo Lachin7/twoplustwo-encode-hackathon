@@ -2,7 +2,7 @@
 
 sampler_path=tinker://6fddcac0-b2a6-545a-b7e4-b3886d94d9d6:train:0/sampler_weights/final
 base_model=Qwen/Qwen3.8-27B
-renderer=qwen3_8_disable_thinking
+renderer=qwen3_8_xhigh_reasoning
 lora_rank=32
 lr=4e-4
 epochs=1
