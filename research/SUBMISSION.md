@@ -1,6 +1,6 @@
 # Submission: spreadsheet-tinker
 
-Research track. Scores below are on the frozen **eval-80** holdout (not a full-400 pass).
+Research track. Primary local metric is the frozen **eval-80** holdout. Full-400 base answers are also shipped under `ship/base-400/`.
 
 ## Team
 
@@ -33,6 +33,7 @@ Frozen ids: `data/splits/eval.json` (56 cell-level + 24 sheet-level).
 |-----|----------|-----------|
 | Base (no LoRA) | `ship/eval80-base/` | **0.325** |
 | **SFT oracle (shipped)** | `ship/sft-eval80/` | **0.450** |
+| Base full 400 | `ship/base-400/` | **0.4375** |
 
 ```json
 {"items": 80, "graded": 80, "missing": 0, "errors": 0, "pass_rate": 0.45, "cell_accuracy": 0.3078, "pass_rate_cell_level": 0.4643, "pass_rate_sheet_level": 0.4167}
@@ -42,6 +43,12 @@ Base for comparison:
 
 ```json
 {"items": 80, "graded": 80, "missing": 0, "errors": 0, "pass_rate": 0.325, "cell_accuracy": 0.3135, "pass_rate_cell_level": 0.2143, "pass_rate_sheet_level": 0.5833}
+```
+
+Full-400 base (`Qwen/Qwen3.8-27B`, no LoRA):
+
+```json
+{"items": 400, "graded": 400, "missing": 0, "errors": 0, "pass_rate": 0.4375, "cell_accuracy": 0.3636, "pass_rate_cell_level": 0.4727, "pass_rate_sheet_level": 0.36}
 ```
 
 ## Your run on the holdout 80 (shipped)
@@ -108,4 +115,6 @@ Without `--model-path` this is the base model (~32.5% on our eval-80), not the s
 - `train/teacher_label.py` + `train/scripts/` — oracle / Gemini labelling
 - `train/sft_tinker.py` — LoRA SFT defaults (= 45% recipe)
 - `ship/sft-eval80/` — graded holdout run
-- `ship/eval80-base/` — base comparison
+- `ship/eval80-base/` — base comparison on holdout 80
+- `ship/base-400/` — base full-400 predictions + `results.json` (pass_rate 0.4375)
+- `train/sft_tinker.py` filters to train-small by default (`--all-train` for all 320)
