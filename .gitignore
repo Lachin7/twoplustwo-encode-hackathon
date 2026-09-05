@@ -1,0 +1,10 @@
+research/data/private/
+research/private/
+research/submissions/*
+!research/submissions/.gitkeep
+results.json
+__pycache__/
+.env
+research/.env
+.venv/
+tinker-cookbook/
