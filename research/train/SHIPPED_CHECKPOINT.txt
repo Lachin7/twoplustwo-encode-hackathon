@@ -1,0 +1,14 @@
+# Shipped SFT checkpoint (eval-80 pass_rate 0.45)
+
+sampler_path=tinker://6fddcac0-b2a6-545a-b7e4-b3886d94d9d6:train:0/sampler_weights/final
+base_model=Qwen/Qwen3.8-27B
+renderer=qwen3_8_disable_thinking
+lora_rank=32
+lr=4e-4
+epochs=1
+data=data/sft/spreadsheet_sft.jsonl
+source=oracle
+eval_artifact=ship/sft-eval80
+
+# Do not ship / use:
+# tinker://f1a81030-828d-5c96-bd28-6c1782ec07b4:train:0/sampler_weights/final  (sft2 / oracle-windowed, ~0.275)

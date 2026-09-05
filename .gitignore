@@ -2,9 +2,18 @@ research/data/private/
 research/private/
 research/submissions/*
 !research/submissions/.gitkeep
-results.json
+research/train/logs/
+# local ad-hoc eval dumps; keep shipped holdout scores under research/ship/
+/results.json
 __pycache__/
 .env
 research/.env
 .venv/
 tinker-cookbook/
+research/ship/outputs/
+research/ship/traces/
+research/ship/predictions.jsonl
+research/ship/run.log
+research/ship/sft2-eval80/
+research/ship/sft320-eval80/
+research/ship/smoke/

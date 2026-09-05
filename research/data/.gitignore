@@ -1,2 +1,4 @@
 spreadsheetbench_verified_400
 *.tar.gz
+sft/**/*.jsonl
+sft/**/manifest*.jsonl

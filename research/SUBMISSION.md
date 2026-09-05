@@ -1,73 +1,111 @@
-# Research track submission
+# Submission: spreadsheet-tinker
 
-Your work lives in **your team's own repo**. By Sunday 12:00 you send us its URL through a form we share then. Everything below must be in it.
+Research track. Scores below are on the frozen **eval-80** holdout (not a full-400 pass).
 
-```
-<your-repo>/
-  SUBMISSION.md          filled copy of SUBMISSION_TEMPLATE.md: team, approach, models, scores
-  Dockerfile             if your pipeline is an agent or executes model-written code
-  predictions.jsonl      your run on the 400
-  outputs/<id>.xlsx      your run on the 400
-  traces/<id>.jsonl      your run on the 400, one line per model call
-  run.log                your run on the 400
-  results.json           shipped evaluator on that run
-```
+## Team
 
-## Docker first
+- Team name: spreadsheet-tinker
+- Members, one GitHub handle per line:
+  - Lachin7
+- Repo URL: https://github.com/Lachin7/twoplustwo-encode-hackathon
 
-The judges run your pipeline themselves on tasks you have not seen, in the same layout as `data/spreadsheetbench_verified_400`: a `dataset.json`, and per task an init workbook and a `prompt.txt`. Your container reads them from `/data`, mounted read-only, and writes everything to `/out`.
+## What we built and why
 
-If your pipeline runs model-written code, and most will, that code runs inside your container and nowhere else. The judge's laptop only sees `/out`.
+We treat SpreadsheetBench as fill-the-graded-cells, not rebuild-the-workbook. The one-shot baseline already tells the model the answer range and asks for JSON values. We kept that contract and hardened the harness (coerce, align to `answer_position`, retry on bad JSON, skip huge ranges, pin `qwen3_8_disable_thinking`).
 
-```sh
-docker build -t <team> .
-docker run --rm -e <YOUR_API_KEYS> -v <dataset dir>:/data:ro -v <empty dir>:/out <team>
-```
+Training uses a frozen 320/80 split (`data/splits/`, seed 42). Train-small (≤200 graded cells) is the SFT set; huge tasks stay on harness fallback. Primary SFT is **oracle** (golden JSON as assistant; **no goldens in the user prompt**). Optional Gemini teacher via Google AI Studio (`GOOGLE_API_KEY`) can replace/filter traces with pass-only keeps (`train/scripts/`).
 
-- Keys come from environment variables. Name them in `SUBMISSION.md`. Never in the repo.
-- Model ids fixed in code, temperature 0 where the API allows it.
-- Nothing else mounted, no `--privileged`, no host paths.
-- A pipeline that is one model call per task and executes no code may skip Docker. Then your repo has the script and a `pyproject.toml` with `uv.lock`, and `SUBMISSION.md` names the one `uv run` command that takes `--dataset-dir` and `--out-dir`.
+Inference: `baseline/tinker_predict.py` / `train/run_infer.py`. Env: `TINKER_API_KEY`, `TINKER_PROJECT_ID`.
 
-Sampling is not deterministic, so two runs differ by a few tasks. That is expected.
+## Models
 
-## What `/out` must contain
+- Base / student: `Qwen/Qwen3.8-27B` on Tinker, renderer `qwen3_8_disable_thinking`
+- **Shipped SFT (use this):** `tinker://6fddcac0-b2a6-545a-b7e4-b3886d94d9d6:train:0/sampler_weights/final`  
+  Oracle LoRA, rank 32, lr 4e-4, batch 8, max_length 16384, 1 epoch (`train/sft_tinker.py` defaults)
+- Do **not** use `train/logs/sft2` / windowed oracle — that run is **worse than base** (~27.5% on eval-80)
+- Teacher (optional data only): `gemini-2.5-pro` via Google AI Studio, or `--oracle`
 
-**`predictions.jsonl`**, one line per task. Whatever your pipeline is, one model call or an agent that runs code, the deliverable is one workbook per task. The evaluator reads this file to find each workbook and grades only the answer cells in it.
+## Scores on the holdout 80
 
-```json
-{"id": "51-12", "output": "outputs/51-12.xlsx", "status": "ok"}
-```
+Frozen ids: `data/splits/eval.json` (56 cell-level + 24 sheet-level).
 
-`status` is `ok` or the error text. A task without a line, or whose file is missing or unreadable, scores zero. If your pipeline fails on a task, still write the line and copy the init workbook as the output.
-
-**`traces/<id>.jsonl`**, one line per model call, in order. Judges read these for the top teams. A trace with the golden value and no reasoning, a prompt containing golden values, or a lookup step is a disqualification.
+| Run | Artifact | pass_rate |
+|-----|----------|-----------|
+| Base (no LoRA) | `ship/eval80-base/` | **0.325** |
+| **SFT oracle (shipped)** | `ship/sft-eval80/` | **0.450** |
 
 ```json
-{"step": 1, "model": "openrouter:deepseek/deepseek-v3.2", "prompt": "...", "response": "...", "input_tokens": 3210, "output_tokens": 412, "latency_ms": 2380, "error": null}
+{"items": 80, "graded": 80, "missing": 0, "errors": 0, "pass_rate": 0.45, "cell_accuracy": 0.3078, "pass_rate_cell_level": 0.4643, "pass_rate_sheet_level": 0.4167}
 ```
 
-Agents add `tool`, `tool_input`, `tool_output` per step. Truncate a workbook serialisation to 20k characters if you must and say so. Keep failed calls in the file, with `error` set.
+Base for comparison:
 
-**`run.log`**, the stdout and stderr of the run, unedited.
+```json
+{"items": 80, "graded": 80, "missing": 0, "errors": 0, "pass_rate": 0.325, "cell_accuracy": 0.3135, "pass_rate_cell_level": 0.2143, "pass_rate_sheet_level": 0.5833}
+```
 
-The baselines in `baseline/` write all four. Copy how they do it.
+## Your run on the holdout 80 (shipped)
 
-## Scores you report
+Judges can score without re-calling Tinker:
 
-Run the shipped evaluator on your own outputs for the 400 and put the file in the repo:
+- `ship/sft-eval80/predictions.jsonl`
+- `ship/sft-eval80/outputs/`
+- `ship/sft-eval80/traces/`
+- `ship/sft-eval80/run.log`
+- `ship/sft-eval80/results.json`
 
 ```sh
-uv run evaluate.py --predictions <your predictions.jsonl> --all --out results.json
+cd research
+uv run evaluate.py --predictions ship/sft-eval80/predictions.jsonl --out ship/sft-eval80/results.json
 ```
 
-Paste the `summary` block into `SUBMISSION.md`. `--all` makes `items` 400. Numbers from any other scorer, or without the file, are not accepted.
+## Reproduce SFT + eval (optional)
 
-| Field | Meaning |
-|---|---|
-| `pass_rate` | tasks where every graded cell matches. The ranking metric. |
-| `cell_accuracy` | graded cells that match, over all tasks. Tie-break. |
-| `pass_rate_cell_level`, `pass_rate_sheet_level` | pass rate per instruction type |
-| `items`, `graded`, `missing`, `errors` | tasks scored, skipped, crashed |
+Needs Tinker credentials. Checkpoint path is on our Tinker project; retrain if you cannot load it:
 
-Reported scores decide which teams judges run first. They do not rank you. The judges' run does.
+```sh
+cd research
+uv sync --extra tinker
+export SOFFICE=/Applications/LibreOffice.app/Contents/MacOS/soffice   # or Linux path
+
+# 1) oracle chats for train-small
+uv run train/teacher_label.py --oracle
+
+# 2) LoRA SFT (same hyperparams as the 45% run)
+uv run train/sft_tinker.py --jsonl data/sft/spreadsheet_sft.jsonl --lora-rank 32 --lr 4e-4 --epochs 1
+
+# 3) eval-80 with the new sampler_weights/final from the log dir
+uv run train/run_infer.py --ids-file data/splits/eval.json \
+  --out-dir ship/sft-eval80-repro --results ship/sft-eval80-repro/results.json \
+  --model-path tinker://<new-run>/sampler_weights/final
+```
+
+Or load the shipped checkpoint (if still readable on the project):
+
+```sh
+uv run train/run_infer.py --ids-file data/splits/eval.json \
+  --out-dir ship/sft-eval80 --results ship/sft-eval80/results.json \
+  --model-path tinker://6fddcac0-b2a6-545a-b7e4-b3886d94d9d6:train:0/sampler_weights/final
+```
+
+Full 400 (costly): `uv run train/run_infer.py --all --resume --out-dir ship --model-path tinker://6fddcac0-b2a6-545a-b7e4-b3886d94d9d6:train:0/sampler_weights/final`
+
+## Code (one-shot values, no model-written code execution)
+
+```sh
+uv run baseline/tinker_predict.py --dataset-dir /data --out-dir /out \
+  --base-model Qwen/Qwen3.8-27B --renderer qwen3_8_disable_thinking \
+  --model-path tinker://6fddcac0-b2a6-545a-b7e4-b3886d94d9d6:train:0/sampler_weights/final
+```
+
+Without `--model-path` this is the base model (~32.5% on our eval-80), not the shipped SFT.
+
+## Things to look at
+
+- `train/SHIPPED_CHECKPOINT.txt` — which LoRA is submission
+- `data/splits/` — frozen 320/80
+- `baseline/common.py` — harness
+- `train/teacher_label.py` + `train/scripts/` — oracle / Gemini labelling
+- `train/sft_tinker.py` — LoRA SFT defaults (= 45% recipe)
+- `ship/sft-eval80/` — graded holdout run
+- `ship/eval80-base/` — base comparison

@@ -1,0 +1,93 @@
+model Qwen/Qwen3.8-27B renderer=qwen3_8_disable_thinking  tasks 80
+23-24    skip: 5510 graded cells > 200
+269-44   ok
+267-21   ok
+73-45    skip: 307 graded cells > 200
+82-30    ok
+283-32   error: 4 validation errors for CellValue
+value.str
+  Input should be a valid string [type=string_type, input_value=datetime.datetime(2022, 2, 1, 0, 0), input_type=datetime]
+    For further information
+433-47   ok
+109-21   ok
+142-19   ok
+194-19   skip: 740 graded cells > 200
+130-9    error: 4 validation errors for CellValue
+value.str
+  Input should be a valid string [type=string_type, input_value=datetime.datetime(2022, 12, 26, 0, 0), input_type=datetime]
+    For further informati
+156-14   ok
+290-1    ok
+334-11   ok
+379-36   ok
+192-22   ok
+341-14   ok
+382-29   ok
+108-24   ok
+560-12   ok
+463-17   ok
+585-41   ok
+516-46   error: 4 validation errors for CellValue
+value.str
+  Input should be a valid string [type=string_type, input_value=datetime.datetime(2020, 1, 2, 0, 0), input_type=datetime]
+    For further information
+37900    ok
+34033    ok
+46240    ok
+47798    ok
+31202    ok
+48921    skip: 4451 graded cells > 200
+48620    ok
+48975    ok
+50526    ok
+38537    ok
+50952    ok
+48983    ok
+50916    ok
+54196    skip: 278 graded cells > 200
+54675    ok
+52216    ok
+54144    ok
+11276    ok
+7902     ok
+15671    skip: 260 graded cells > 200
+18645    ok
+12864    ok
+31011    ok
+32438    ok
+32902    ok
+33157    ok
+1818     ok
+37378    ok
+37229    ok
+39190    ok
+41589    ok
+43589    ok
+35739    ok
+42515    ok
+50683    ok
+52532    ok
+52541    ok
+54474    ok
+44296    ok
+52305    ok
+54667    ok
+55049    ok
+55979    ok
+58701    ok
+57033    ok
+44017    skip: 348 graded cells > 200
+45937    ok
+43657    ok
+42902    ok
+57117    ok
+57354    ok
+46646    ok
+567-21   error: 4 validation errors for CellValue
+value.str
+  Input should be a valid string [type=string_type, input_value=datetime.datetime(2019, 5, 1, 0, 0), input_type=datetime]
+    For further information
+47827    ok
+59358    ok
+59224    ok
+57693    ok

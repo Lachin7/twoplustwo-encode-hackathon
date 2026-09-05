@@ -1,0 +1,1 @@
+{"step": 1, "model": "Qwen/Qwen3.8-27B renderer=qwen3_8_disable_thinking", "prompt": null, "response": null, "input_tokens": null, "output_tokens": null, "latency_ms": 0, "error": "skip: 740 graded cells > 200"}

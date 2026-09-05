@@ -6,7 +6,7 @@ dependencies = [
     "openpyxl>=3.1",
     "opentelemetry-exporter-otlp>=1.44.0",
     "opentelemetry-sdk>=1.44.0",
-    "pydantic-ai-slim[openrouter]>=2.38.0",
+    "pydantic-ai-slim[openrouter,google]>=2.38.0",
 ]
 
 [project.optional-dependencies]

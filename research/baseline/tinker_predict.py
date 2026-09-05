@@ -1,12 +1,14 @@
 """Same baseline through Tinker: a base model, or your fine-tuned sampler checkpoint.
 
     uv sync --extra tinker
-    uv run baseline/tinker_predict.py --out-dir submissions/qwen3-8b --base-model Qwen/Qwen3-8B --ids 13-1,51-12
-    uv run baseline/tinker_predict.py --out-dir submissions/mine --base-model Qwen/Qwen3-8B \
+    uv run baseline/tinker_predict.py --out-dir submissions/qwen38-27b --base-model Qwen/Qwen3.8-27B --ids 13-1,51-12
+    uv run baseline/tinker_predict.py --out-dir submissions/qwen38-27b --base-model Qwen/Qwen3.8-27B \
+        --renderer qwen3_8_disable_thinking --ids 13-1,51-12
+    uv run baseline/tinker_predict.py --out-dir submissions/mine --base-model Qwen/Qwen3.8-27B \
         --model-path tinker://<run-id>/sampler_weights/final
 
-Needs TINKER_API_KEY in .env. The base model picks the tokenizer and chat template. Writes the same
-files as llm_predict.py.
+Needs TINKER_API_KEY and TINKER_PROJECT_ID in .env. Hackathon model is Qwen/Qwen3.8-27B.
+Writes the same files as llm_predict.py.
 """
 
 import argparse
@@ -28,10 +30,15 @@ def parse_args() -> argparse.Namespace:
     p.add_argument("--out-dir", required=True)
     p.add_argument("--dataset-dir", default=str(DEFAULT_DATASET))
     p.add_argument("--ids", help="comma-separated task ids (default: all)")
-    p.add_argument("--base-model", required=True, help="e.g. Qwen/Qwen3-8B")
+    p.add_argument("--base-model", required=True, help="e.g. Qwen/Qwen3.8-27B")
     p.add_argument("--model-path", help="tinker://... sampler checkpoint. Omit to sample the base model.")
+    p.add_argument(
+        "--renderer",
+        help="override chat renderer (e.g. qwen3_8_disable_thinking). Default: model recommended.",
+    )
     p.add_argument("--concurrency", type=int, default=4)
     p.add_argument("--max-tokens", type=int, default=8192, help="sheet-level tasks need long replies")
+    p.add_argument("--resume", action="store_true", help="skip ids already in predictions.jsonl")
     return p.parse_args()
 
 
@@ -39,7 +46,13 @@ async def main():
     load_env()
     args = parse_args()
     sampler = tinker.ServiceClient().create_sampling_client(base_model=args.base_model, model_path=args.model_path)
-    renderer = renderers.get_renderer(get_recommended_renderer_name(args.base_model), get_tokenizer(args.base_model))
+    default_renderer = (
+        "qwen3_8_disable_thinking"
+        if "Qwen3.8" in args.base_model
+        else get_recommended_renderer_name(args.base_model)
+    )
+    renderer_name = args.renderer or default_renderer
+    renderer = renderers.get_renderer(renderer_name, get_tokenizer(args.base_model))
     params = types.SamplingParams(max_tokens=args.max_tokens, temperature=0, stop=renderer.get_stop_sequences())
 
     async def complete(prompt: str):
@@ -53,7 +66,8 @@ async def main():
         return content, model_input.length, len(tokens)
 
     tasks = selected_tasks(Path(args.dataset_dir), parse_ids(args.ids))
-    await run(complete, args.model_path or args.base_model, tasks, Path(args.out_dir), args.concurrency)
+    label = args.model_path or args.base_model
+    await run(complete, f"{label} renderer={renderer_name}", tasks, Path(args.out_dir), args.concurrency, resume=args.resume)
 
 
 if __name__ == "__main__":
