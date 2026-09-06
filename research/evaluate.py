@@ -1,6 +1,8 @@
 import argparse
 import json
+import os
 import tempfile
+from concurrent.futures import ThreadPoolExecutor, as_completed
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -17,6 +19,7 @@ class EvaluateConfig:
     oracle: bool
     quiet: bool
     results_path: Path | None
+    workers: int
 
 
 def parse_args() -> argparse.Namespace:
@@ -29,6 +32,12 @@ def parse_args() -> argparse.Namespace:
     p.add_argument("--oracle", action="store_true", help="score golden against golden to check the grader")
     p.add_argument("--out", help="write summary and per-item results as JSON")
     p.add_argument("--quiet", action="store_true")
+    p.add_argument(
+        "--workers",
+        type=int,
+        default=int(os.environ.get("EVAL_WORKERS", "8")),
+        help="parallel LibreOffice recalcs (default 8, or EVAL_WORKERS)",
+    )
     args = p.parse_args()
     if not args.predictions and not args.oracle:
         p.error("--predictions is required unless --oracle")
@@ -48,6 +57,7 @@ def config_from_args(args: argparse.Namespace) -> EvaluateConfig:
         oracle=args.oracle,
         quiet=args.quiet,
         results_path=Path(args.out) if args.out else None,
+        workers=max(1, args.workers),
     )
 
 
@@ -120,11 +130,13 @@ def score_task(task, output_xlsx, recalc, work_dir):
     }
 
 
-def score(predictions, tasks, *, recalc=True, oracle=False, predictions_path=None):
+def score(predictions, tasks, *, recalc=True, oracle=False, predictions_path=None, workers=8):
     by_id = predictions_by_id(predictions)
     items = []
+    jobs = []
     predictions_path = Path(predictions_path) if predictions_path else None
     with tempfile.TemporaryDirectory() as work:
+        work_root = Path(work)
         for task in tasks:
             prediction = by_id.get(task["id"])
             output = task_output_path(task, prediction, oracle=oracle, predictions_path=predictions_path)
@@ -135,9 +147,22 @@ def score(predictions, tasks, *, recalc=True, oracle=False, predictions_path=Non
                 items.append({"id": task["id"], "type": task["instruction_type"], "status": "missing",
                               "cells": golden_cell_count(task), "correct": 0})
                 continue
-            result = score_task(task, output, recalc and not oracle, work)
+            jobs.append((task, output))
+
+        def _one(task, output):
+            task_dir = work_root / str(task["id"])
+            task_dir.mkdir(parents=True, exist_ok=True)
+            result = score_task(task, output, recalc and not oracle, task_dir)
             result.update({"id": task["id"], "type": task["instruction_type"]})
-            items.append(result)
+            return result
+
+        if workers <= 1 or len(jobs) <= 1:
+            items.extend(_one(task, output) for task, output in jobs)
+        else:
+            with ThreadPoolExecutor(max_workers=workers) as pool:
+                futs = [pool.submit(_one, task, output) for task, output in jobs]
+                items.extend(fut.result() for fut in as_completed(futs))
+    items.sort(key=lambda row: str(row.get("id") or ""))
     return summarise(items), items
 
 
@@ -193,6 +218,7 @@ def main():
         recalc=config.recalc,
         oracle=config.oracle,
         predictions_path=config.predictions_path,
+        workers=config.workers,
     )
 
     if not config.quiet:

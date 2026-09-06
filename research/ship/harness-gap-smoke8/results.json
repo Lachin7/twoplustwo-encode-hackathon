@@ -1,0 +1,164 @@
+{
+  "summary": {
+    "items": 8,
+    "graded": 8,
+    "missing": 0,
+    "errors": 0,
+    "pass_rate": 0.625,
+    "cell_accuracy": 0.7785,
+    "pass_rate_cell_level": 0.4,
+    "pass_rate_sheet_level": 1.0
+  },
+  "items": [
+    {
+      "status": "graded",
+      "cells": 680,
+      "correct": 680,
+      "pass": true,
+      "mismatches": [],
+      "id": "353-6",
+      "type": "Sheet-Level Manipulation"
+    },
+    {
+      "status": "graded",
+      "cells": 56,
+      "correct": 56,
+      "pass": true,
+      "mismatches": [],
+      "id": "398-14",
+      "type": "Sheet-Level Manipulation"
+    },
+    {
+      "status": "graded",
+      "cells": 348,
+      "correct": 6,
+      "pass": false,
+      "mismatches": [
+        {
+          "cell": "Data!AJ14",
+          "expected": 40982.1633425799,
+          "actual": 41122.014524435
+        },
+        {
+          "cell": "Data!AK14",
+          "expected": 40982.1633425799,
+          "actual": 41122.014524435
+        },
+        {
+          "cell": "Data!AL14",
+          "expected": 62411.2410922792,
+          "actual": 62624.2187663672
+        },
+        {
+          "cell": "Data!AM14",
+          "expected": 51227.7041782249,
+          "actual": 51402.5181555437
+        },
+        {
+          "cell": "Data!AN14",
+          "expected": 75133.9661280631,
+          "actual": 75390.3599614641
+        }
+      ],
+      "id": "44017",
+      "type": "Cell-Level Manipulation"
+    },
+    {
+      "status": "graded",
+      "cells": 60,
+      "correct": 52,
+      "pass": false,
+      "mismatches": [
+        {
+          "cell": "Edit!C7",
+          "expected": "11:00:00",
+          "actual": null
+        },
+        {
+          "cell": "Edit!D7",
+          "expected": "13:45:00",
+          "actual": null
+        },
+        {
+          "cell": "Edit!E7",
+          "expected": "15:15:00",
+          "actual": null
+        },
+        {
+          "cell": "Edit!C10",
+          "expected": "13:00:00",
+          "actual": null
+        },
+        {
+          "cell": "Edit!B14",
+          "expected": "10:30:00",
+          "actual": null
+        }
+      ],
+      "id": "49667",
+      "type": "Cell-Level Manipulation"
+    },
+    {
+      "status": "graded",
+      "cells": 22,
+      "correct": 17,
+      "pass": false,
+      "mismatches": [
+        {
+          "cell": "Daily Numbers!Q4",
+          "expected": 33770,
+          "actual": 0
+        },
+        {
+          "cell": "Daily Numbers!Q9",
+          "expected": 1345,
+          "actual": 0
+        },
+        {
+          "cell": "Daily Numbers!Q11",
+          "expected": 3,
+          "actual": 0
+        },
+        {
+          "cell": "Daily Numbers!Q15",
+          "expected": 39,
+          "actual": 0
+        },
+        {
+          "cell": "Daily Numbers!Q21",
+          "expected": 643,
+          "actual": 0
+        }
+      ],
+      "id": "51090",
+      "type": "Cell-Level Manipulation"
+    },
+    {
+      "status": "graded",
+      "cells": 149,
+      "correct": 149,
+      "pass": true,
+      "mismatches": [],
+      "id": "54638",
+      "type": "Cell-Level Manipulation"
+    },
+    {
+      "status": "graded",
+      "cells": 190,
+      "correct": 190,
+      "pass": true,
+      "mismatches": [],
+      "id": "57232",
+      "type": "Cell-Level Manipulation"
+    },
+    {
+      "status": "graded",
+      "cells": 98,
+      "correct": 98,
+      "pass": true,
+      "mismatches": [],
+      "id": "61-4",
+      "type": "Sheet-Level Manipulation"
+    }
+  ]
+}

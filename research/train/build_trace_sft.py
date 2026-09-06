@@ -48,6 +48,17 @@ def parse_args() -> argparse.Namespace:
         help="keep if pass, or cell_accuracy >= this (1.0 = pass only)",
     )
     p.add_argument("--max-chars", type=int, default=MAX_CHARS)
+    p.add_argument("--max-keep", type=int, default=0, help="0 = keep all passing traces")
+    p.add_argument(
+        "--formula-or-tool-first",
+        action="store_true",
+        help="prefer formula/python traces, then fill with oneshot passes",
+    )
+    p.add_argument(
+        "--agent-only",
+        action="store_true",
+        help="keep only agent-loop passes (do not train on oneshot JSON)",
+    )
     return p.parse_args()
 
 
@@ -140,6 +151,9 @@ def build(
     eval_ids: set[str],
     min_cell_acc: float,
     max_chars: int,
+    max_keep: int = 0,
+    formula_or_tool_first: bool = False,
+    agent_only: bool = False,
 ) -> tuple[list[dict], list[dict]]:
     passed = passing_ids(results, min_cell_acc)
     conversations: list[dict] = []
@@ -167,6 +181,10 @@ def build(
         rec["n_turns"] = len(rows)
         rec["mode"] = "agent" if any(r.get("mode") == "agent" for r in rows) else "oneshot"
         rec["formula_or_tool"] = uses_formula_or_tool(rows)
+        if agent_only and rec["mode"] != "agent":
+            rec["reason"] = "not_agent"
+            manifest.append(rec)
+            continue
         messages = conversation_from_rows(rows)
         if messages is None:
             rec["reason"] = "no_conversation"
@@ -177,7 +195,7 @@ def build(
             rec["reason"] = f"too_long:{n_chars}"
             manifest.append(rec)
             continue
-        conversations.append({"messages": messages})
+        conversations.append({"messages": messages, "_id": task_id, "_formula": rec["formula_or_tool"]})
         rec["kept"] = True
         rec["reason"] = "pass"
         rec["cells"] = item.get("cells")
@@ -185,7 +203,21 @@ def build(
         rec["n_chars"] = n_chars
         rec["n_assistant"] = sum(1 for m in messages if m["role"] == "assistant")
         manifest.append(rec)
-    return conversations, manifest
+
+    ranked = [c for c in conversations]
+    if formula_or_tool_first:
+        ranked.sort(key=lambda c: (0 if c.get("_formula") else 1, c.get("_id") or ""))
+    if max_keep and len(ranked) > max_keep:
+        keep_ids = {c["_id"] for c in ranked[:max_keep]}
+        conversations = [c for c in ranked if c["_id"] in keep_ids]
+        for rec in manifest:
+            if rec.get("kept") and rec["id"] not in keep_ids:
+                rec["kept"] = False
+                rec["reason"] = "max_keep"
+    else:
+        conversations = ranked
+    cleaned = [{"messages": c["messages"]} for c in conversations]
+    return cleaned, manifest
 
 
 def main() -> None:
@@ -208,6 +240,9 @@ def main() -> None:
         eval_ids,
         args.min_cell_acc,
         args.max_chars,
+        max_keep=args.max_keep,
+        formula_or_tool_first=args.formula_or_tool_first,
+        agent_only=args.agent_only,
     )
     out_jsonl = Path(args.out_jsonl)
     out_manifest = Path(args.out_manifest)

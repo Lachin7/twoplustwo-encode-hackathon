@@ -51,9 +51,9 @@ def parse_args() -> argparse.Namespace:
     )
     p.add_argument(
         "--train-on-what",
-        choices=("last_assistant_message", "all_assistant_messages"),
+        choices=("last_assistant_message", "all_assistant_messages", "customized"),
         default="last_assistant_message",
-        help="all_assistant_messages for agent tool traces; last for one-shot JSON",
+        help="Use customized with per-message trainable flags to mask failed agent turns.",
     )
     p.add_argument("--log-path", default=str(ROOT / "train" / "logs" / "sft-small"))
     return p.parse_args()

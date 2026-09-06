@@ -11,9 +11,9 @@
 
 We stayed on the official model `Qwen/Qwen3.8-27B` via Tinker (`qwen3_8_xhigh_reasoning`) and spent the time on the harness, not another oracle LoRA. SpreadsheetBench grades only the answer cells after LibreOffice recalc, so the pipeline writes those cells and leaves the rest of the workbook alone.
 
-Small tasks (`≤20` graded cells) stay one-shot JSON: literals or a short formula. A hardened parser strips thinking, fences, and trailing commas. Writes accept Excel formulas (`_xlfn` / FILTER), dates, merged cells, and repaired ranges. If the model gives one relative formula on a tall column or a wide row, the harness fills the rest. The prompt includes a 120×30 overview plus a focus window when the answer or data sit outside that crop.
+Small tasks (`≤20` graded cells) stay one-shot JSON: literals or a short formula. A hardened parser strips thinking, fences, and trailing commas. Writes accept Excel formulas (`_xlfn` / FILTER), dates, merged cells, and repaired ranges. If the model gives one relative formula on a tall column or a wide row, the harness fills the rest. One-shot prompts include a 120×30 preview; agent prompts use 40 rows plus focus windows because the agent can inspect the live workbook.
 
-Tasks with more than 20 graded cells use a six-turn Python tool on a live openpyxl workbook (`{"tool":"python","code":"..."}` / `{"tool":"done"}` / a `cells` JSON). Exec is restricted and time-capped. An early `done` on a barely-filled range is sent back for another turn. Oracle SFT on the 400 goldens helped eval-80 and hurt large sheet tasks; we do not ship that checkpoint. The Python loop is why we ship Docker.
+Tasks with more than 20 graded cells use a six-turn Python tool on a live openpyxl workbook (`{"tool":"python","code":"..."}` / `{"tool":"done"}` / a `cells` JSON). Exec is restricted, time-capped, and exposes an allowlist of common builtins and modules. Exact worksheet names are separated from preview labels, and completion tokens are capped to Qwen's remaining context. An early `done` on a barely-filled range is sent back for another turn. The Python loop is why we ship Docker.
 
 ## Models
 
@@ -26,11 +26,14 @@ cd research
 uv run evaluate.py --predictions ship/base-400-agent/predictions.jsonl --all --out ship/base-400-agent/results.json
 ```
 
-`items` must be 400. Summary is filled after the shipped run finishes:
-
 ```json
-{"items": 400, "graded": "...", "missing": "...", "errors": "...", "pass_rate": "...", "cell_accuracy": "...", "pass_rate_cell_level": "...", "pass_rate_sheet_level": "..."}
+{"items": 400, "graded": 400, "missing": 0, "errors": 0, "pass_rate": 0.65, "cell_accuracy": 0.7692, "pass_rate_cell_level": 0.6691, "pass_rate_sheet_level": 0.608}
 ```
+
+Holdout check (frozen eval-80, same pipeline, no LoRA): pass_rate **0.7625**, sheet **0.75**.
+
+Masked agent-trace LoRA research candidate on the same frozen eval-80:
+pass_rate **0.775**, sheet **0.7917**. See `research/FAILURE_ANALYSIS.md`.
 
 ## Your run on the 400
 
@@ -69,4 +72,6 @@ Env: `TINKER_API_KEY` (required), `TINKER_PROJECT_ID` (if your Tinker project ne
 - `research/sb.py` — workbook serialize + focus windows
 - `research/ship/verify-agent/` — train-slice one-shot vs auto (no eval leak)
 - `research/baseline/test_harness_changes.py` — harness unit tests
+- `research/FAILURE_ANALYSIS.md` — quantified 400 failure clusters and FT ablations
+- `research/ship/eval80-clean-agent-v2/results.json` — first LoRA to beat base+agent on eval-80
 - `research/data/splits/` — frozen 320/80 used only for research, not for the shipped 400

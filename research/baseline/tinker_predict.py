@@ -52,7 +52,6 @@ async def main():
     sampler = tinker.ServiceClient().create_sampling_client(base_model=args.base_model, model_path=args.model_path)
     renderer_name = args.renderer or get_recommended_renderer_name(args.base_model)
     renderer = renderers.get_renderer(renderer_name, get_tokenizer(args.base_model))
-    params = types.SamplingParams(max_tokens=args.max_tokens, temperature=0, stop=renderer.get_stop_sequences())
 
     def _content(response) -> str:
         content = renderer.parse_response(response.sequences[0].tokens)[0]["content"]
@@ -60,8 +59,20 @@ async def main():
             content = "".join(part.get("text", "") for part in content if part.get("type") == "text")
         return content
 
-    async def complete_chat(messages):
+    async def complete_chat(messages, max_tokens: int | None = None):
         model_input = renderer.build_generation_prompt(messages)
+        # Qwen3.8 has a 65,536-token context window. Long spreadsheet previews
+        # need a smaller completion budget instead of a hard 400 from Tinker.
+        available = 65_536 - model_input.length - 32
+        if available < 256:
+            raise ValueError(
+                f"prompt too long ({model_input.length} tokens); reduce workbook preview"
+            )
+        params = types.SamplingParams(
+            max_tokens=min(max_tokens or args.max_tokens, args.max_tokens, available),
+            temperature=0,
+            stop=renderer.get_stop_sequences(),
+        )
         response = await sampler.sample_async(prompt=model_input, num_samples=1, sampling_params=params)
         return _content(response), model_input.length, len(response.sequences[0].tokens)
 

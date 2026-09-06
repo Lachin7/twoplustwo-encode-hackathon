@@ -8,10 +8,12 @@ from __future__ import annotations
 
 import concurrent.futures
 import contextlib
+import importlib
 import io
 import json
 import re
 import shutil
+import textwrap
 import time
 from pathlib import Path
 from typing import Any, Callable, Awaitable
@@ -33,11 +35,15 @@ from common import (
 from sb import answer_cells
 
 AGENT_CELL_THRESHOLD = 20
-MAX_TURNS = 6
+MAX_TURNS = 10
+# Reasoning that runs to the sampling cap never reaches a tool call, so the turn is
+# lost. Capping each turn below the context limit trades a little headroom for more
+# turns at roughly the same total token spend.
+AGENT_MAX_TOKENS = 10240
 EXEC_TIMEOUT_S = 20
 RESULT_CHARS = 4000
 
-CompleteChat = Callable[[list[dict]], Awaitable[tuple[str, int | None, int | None]]]
+CompleteChat = Callable[..., Awaitable[tuple[str, int | None, int | None]]]
 
 AGENT_SYSTEM = (
     SYSTEM_PROMPT
@@ -47,6 +53,8 @@ AGENT_SYSTEM = (
     '{"cells":[{"cell":"B6","value":"=A6*2"}]}. '
     "Namespace: wb (openpyxl workbook), task (dict), ANSWER (list of (sheet, coord) to fill), "
     "openpyxl, get_column_letter, json, math, datetime, re. Print to inspect. "
+    "Worksheet names are exactly the strings in wb.sheetnames; never append display labels such as "
+    "'overview' or 'focus'. Common safe modules are already available, so imports are unnecessary. "
     "No network, subprocess, or files. Save by writing cells on wb, then {\"tool\":\"done\"}."
 )
 
@@ -62,9 +70,40 @@ def should_use_agent(task: dict) -> bool:
     return graded_count(task) > AGENT_CELL_THRESHOLD
 
 
+_FENCE_RE = re.compile(r"```(?:([A-Za-z0-9_+-]*)[^\n]*)?\n(.*?)```", re.S)
+
+
+def as_python(code: str) -> str | None:
+    """Return the code if it parses as Python, retrying once dedented."""
+    if not code.strip():
+        return None
+    for candidate in (code, textwrap.dedent(code)):
+        try:
+            compile(candidate, "<agent>", "exec")
+        except (SyntaxError, ValueError):
+            continue
+        return candidate
+    return None
+
+
+def _python_fence(text: str) -> str | None:
+    """Last fenced block that is really Python.
+
+    Models paste the sheet back inside a fence while reasoning, so a fence is not
+    by itself evidence of code — it has to compile.
+    """
+    blocks = _FENCE_RE.findall(text)
+    tagged = [code for lang, code in blocks if lang.lower() == "python"]
+    plain = [code for lang, code in blocks if lang.lower() != "python"]
+    for code in list(reversed(tagged)) + list(reversed(plain)):
+        parsed = as_python(code)
+        if parsed is not None:
+            return parsed
+    return None
+
+
 def parse_agent_turn(text: str) -> tuple[str, Any]:
     """Return ('python', code), ('done', None), or ('answer', SpreadsheetAnswer)."""
-    fence = re.search(r"```(?:python)?\s*\n(.*?)```", text, flags=re.S | re.I)
     try:
         answer = parse_answer(text)
         return "answer", answer
@@ -93,8 +132,9 @@ def parse_agent_turn(text: str) -> tuple[str, Any]:
                 return "python", str(payload["code"])
             if payload.get("cells") is not None:
                 return "answer", SpreadsheetAnswer.model_validate(payload)
-    if fence and fence.group(1).strip():
-        return "python", fence.group(1)
+    fence = _python_fence(stripped) or _python_fence(text)
+    if fence is not None:
+        return "python", fence
     raise ValueError(f"no tool or JSON in reply: {text[:120]!r}")
 
 
@@ -105,31 +145,72 @@ _SAFE_BUILTINS = {
     "bool": bool,
     "dict": dict,
     "enumerate": enumerate,
+    "Exception": Exception,
     "filter": filter,
     "float": float,
+    "hasattr": hasattr,
     "int": int,
+    "isinstance": isinstance,
     "len": len,
     "list": list,
+    "map": map,
     "max": max,
     "min": min,
+    "next": next,
+    "ord": ord,
+    "chr": chr,
+    "dir": dir,
+    "divmod": divmod,
+    "pow": pow,
     "print": print,
     "range": range,
+    "repr": repr,
     "reversed": reversed,
     "round": round,
+    "slice": slice,
     "set": set,
     "sorted": sorted,
     "str": str,
     "sum": sum,
     "tuple": tuple,
+    "type": type,
     "zip": zip,
     "True": True,
     "False": False,
     "None": None,
 }
 
+_SAFE_IMPORTS = {
+    "collections",
+    "copy",
+    "datetime",
+    "itertools",
+    "json",
+    "math",
+    "openpyxl",
+    "re",
+    "statistics",
+}
+
+
+def _safe_import(name, globals=None, locals=None, fromlist=(), level=0):
+    root = name.split(".", 1)[0]
+    if level or root not in _SAFE_IMPORTS:
+        raise ImportError(f"module {name!r} is not available")
+    return importlib.import_module(name)
+
+
+_SAFE_BUILTINS["__import__"] = _safe_import
+
 
 def run_python(code: str, wb, task: dict) -> str:
     """Exec model code against the live workbook. Restricted builtins, time-capped."""
+    normalized = as_python(code)
+    if normalized is None:
+        return (
+            "ERROR: that is not valid Python. Send the code as one JSON string with "
+            "\\n for newlines, no markdown fence, no leading indentation."
+        )
     buf = io.StringIO()
     ns = {
         "__builtins__": _SAFE_BUILTINS,
@@ -157,7 +238,7 @@ def run_python(code: str, wb, task: dict) -> str:
 
     def _run() -> None:
         with contextlib.redirect_stdout(buf), contextlib.redirect_stderr(buf):
-            exec(code, ns, ns)
+            exec(normalized, ns, ns)
 
     try:
         with concurrent.futures.ThreadPoolExecutor(max_workers=1) as pool:
@@ -173,7 +254,15 @@ def run_python(code: str, wb, task: dict) -> str:
     return out if out.strip() else "(no output — workbook updated if your code wrote cells)"
 
 
-def _save_wb(wb, path: Path) -> None:
+def _save_wb(wb, path: Path, task: dict | None = None) -> None:
+    if task is not None:
+        from common import set_cell_value
+
+        for sheet, coord in answer_cells(task, wb):
+            ws = wb[sheet] if sheet and sheet in wb.sheetnames else wb.active
+            value = ws[coord].value
+            if isinstance(value, str) and not value.lstrip().startswith("="):
+                set_cell_value(ws, coord, value)
     path.parent.mkdir(parents=True, exist_ok=True)
     try:
         wb.save(path)
@@ -217,8 +306,11 @@ async def predict_task_agent(
             "error": None,
         }
         started = time.time()
+        text: str | None = None
         try:
-            text, trace["input_tokens"], trace["output_tokens"] = await complete_chat(messages)
+            text, trace["input_tokens"], trace["output_tokens"] = await complete_chat(
+                messages, max_tokens=AGENT_MAX_TOKENS
+            )
             trace["response"] = text
             kind, payload = parse_agent_turn(text)
             messages.append({"role": "assistant", "content": text})
@@ -241,7 +333,7 @@ async def predict_task_agent(
                 else:
                     finished = True
             elif kind == "done":
-                _save_wb(wb, out)
+                _save_wb(wb, out, task)
                 last_error = None
                 status = "ok"
                 trace["tool"] = "done"
@@ -261,7 +353,7 @@ async def predict_task_agent(
             else:
                 trace["tool"] = "python"
                 result = run_python(payload, wb, task)
-                _save_wb(wb, out)
+                _save_wb(wb, out, task)
                 trace["tool_output"] = result[:800]
                 messages.append(
                     {
@@ -278,18 +370,28 @@ async def predict_task_agent(
             last_error = e
             trace["error"] = f"{type(e).__name__}: {e}"[:500]
             status = f"error: {e}"[:200]
-            messages.append(
-                {
-                    "role": "user",
-                    "content": f"Could not parse that ({e}). JSON only: tool python, tool done, or cells.",
-                }
-            )
+            truncated = (trace["output_tokens"] or 0) >= AGENT_MAX_TOKENS - 64
+            if truncated:
+                trace["error"] = "truncated before acting"
+                nudge = (
+                    "You ran out of room before replying with a tool. Stop analysing and "
+                    'answer now with one line of JSON: {"tool":"python","code":"..."}.'
+                )
+            else:
+                nudge = f"Could not parse that ({e}). JSON only: tool python, tool done, or cells."
+            # Keep roles alternating and let the model see its own dead end, otherwise
+            # it re-runs the same reasoning and burns every remaining turn.
+            if text:
+                messages.append({"role": "assistant", "content": text[-1500:]})
+            messages.append({"role": "user", "content": nudge})
         trace["latency_ms"] = int((time.time() - started) * 1000)
         append_jsonl(out_dir / "traces" / f"{task['id']}.jsonl", trace)
         if finished:
             break
+        if last_error is not None and "prompt too long" in str(last_error):
+            break
     if not finished:
-        _save_wb(wb, out)
+        _save_wb(wb, out, task)
         if last_error is not None:
             status = f"error: {last_error}"[:200]
     try:
@@ -316,4 +418,19 @@ async def predict_routed(
     use = agent == "always" or (agent == "auto" and should_use_agent(task) and complete_chat is not None)
     if use and complete_chat is not None:
         return await predict_task_agent(complete_chat, model, task, out_dir)
+    if agent == "auto" and complete_chat is not None:
+        status = await predict_task(
+            complete,
+            model,
+            task,
+            out_dir,
+            record_prediction=False,
+        )
+        if status.startswith("error:"):
+            return await predict_task_agent(complete_chat, model, task, out_dir)
+        append_jsonl(
+            out_dir / "predictions.jsonl",
+            {"id": task["id"], "output": f"outputs/{task['id']}.xlsx", "status": status},
+        )
+        return status
     return await predict_task(complete, model, task, out_dir)

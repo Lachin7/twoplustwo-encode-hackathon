@@ -1,0 +1,166 @@
+{
+  "summary": {
+    "items": 7,
+    "graded": 7,
+    "missing": 0,
+    "errors": 0,
+    "pass_rate": 0.4286,
+    "cell_accuracy": 0.5008,
+    "pass_rate_cell_level": 0.5,
+    "pass_rate_sheet_level": 0.3333
+  },
+  "items": [
+    {
+      "status": "graded",
+      "cells": 200,
+      "correct": 151,
+      "pass": false,
+      "mismatches": [
+        {
+          "cell": "Sheet3!A2",
+          "expected": "ZPAM_FLEXI+U4_PackageDetailsRelation+U4_PackageDetailsForm+Sealing Method+u4_description",
+          "actual": "ZPAM_FLEXI+U4_CompPropertyRelation+U4_ComponentPropertyForm+Solvent Retention_including Ethanol+u4_coa"
+        },
+        {
+          "cell": "Sheet3!A3",
+          "expected": "ZPAM_FLEXI+U4_PackageDetailsRelation+U4_PackageDetailsForm+Sealing Method+u4_type",
+          "actual": "ZPAM_FLEXI+U4_CompPropertyRelation+U4_ComponentPropertyForm+Solvent Retention_including Ethanol+u4_comment"
+        },
+        {
+          "cell": "Sheet3!A4",
+          "expected": "ZPAM_FLEXI+U4_CompPropertyRelation+U4_ComponentPropertyForm+Solvent Retention_including Ethanol+u4_coa",
+          "actual": "ZPAM_FLEXI+U4_CompPropertyRelation+U4_ComponentPropertyForm+Solvent Retention_including Ethanol+u4_cr"
+        },
+        {
+          "cell": "Sheet3!A5",
+          "expected": "ZPAM_FLEXI+U4_CompPropertyRelation+U4_ComponentPropertyForm+Solvent Retention_including Ethanol+u4_comment",
+          "actual": "ZPAM_FLEXI+U4_CompPropertyRelation+U4_ComponentPropertyForm+Solvent Retention_including Ethanol+u4_details"
+        },
+        {
+          "cell": "Sheet3!A6",
+          "expected": "ZPAM_FLEXI+U4_CompPropertyRelation+U4_ComponentPropertyForm+Solvent Retention_including Ethanol+u4_cr",
+          "actual": "ZPAM_FLEXI+U4_CompPropertyRelation+U4_ComponentPropertyForm+Solvent Retention_including Ethanol+u4_max"
+        }
+      ],
+      "id": "170-13",
+      "type": "Sheet-Level Manipulation"
+    },
+    {
+      "status": "graded",
+      "cells": 1,
+      "correct": 1,
+      "pass": true,
+      "mismatches": [],
+      "id": "254-34",
+      "type": "Sheet-Level Manipulation"
+    },
+    {
+      "status": "graded",
+      "cells": 2,
+      "correct": 0,
+      "pass": false,
+      "mismatches": [
+        {
+          "cell": "Sheet1!B9",
+          "expected": "Black",
+          "actual": "#VALUE!"
+        },
+        {
+          "cell": "Sheet1!B10",
+          "expected": "Red",
+          "actual": "#VALUE!"
+        }
+      ],
+      "id": "50526",
+      "type": "Cell-Level Manipulation"
+    },
+    {
+      "status": "graded",
+      "cells": 6,
+      "correct": 0,
+      "pass": false,
+      "mismatches": [
+        {
+          "cell": "Result!G10",
+          "expected": 202,
+          "actual": 0
+        },
+        {
+          "cell": "Result!H10",
+          "expected": 137,
+          "actual": 0
+        },
+        {
+          "cell": "Result!I10",
+          "expected": 155,
+          "actual": 0
+        },
+        {
+          "cell": "Result!J10",
+          "expected": 439,
+          "actual": 0
+        },
+        {
+          "cell": "Result!K10",
+          "expected": 376,
+          "actual": 0
+        }
+      ],
+      "id": "55085",
+      "type": "Cell-Level Manipulation"
+    },
+    {
+      "status": "graded",
+      "cells": 2,
+      "correct": 2,
+      "pass": true,
+      "mismatches": [],
+      "id": "56921",
+      "type": "Cell-Level Manipulation"
+    },
+    {
+      "status": "graded",
+      "cells": 95988,
+      "correct": 48013,
+      "pass": false,
+      "mismatches": [
+        {
+          "cell": "Consolidate_ALL!A4000",
+          "expected": "2023-05-01 00:00:00",
+          "actual": null
+        },
+        {
+          "cell": "Consolidate_ALL!B4000",
+          "expected": "CEXTCE",
+          "actual": null
+        },
+        {
+          "cell": "Consolidate_ALL!C4000",
+          "expected": "Total External",
+          "actual": null
+        },
+        {
+          "cell": "Consolidate_ALL!D4000",
+          "expected": "None",
+          "actual": null
+        },
+        {
+          "cell": "Consolidate_ALL!E4000",
+          "expected": "None",
+          "actual": null
+        }
+      ],
+      "id": "80-42",
+      "type": "Sheet-Level Manipulation"
+    },
+    {
+      "status": "graded",
+      "cells": 10,
+      "correct": 10,
+      "pass": true,
+      "mismatches": [],
+      "id": "9448",
+      "type": "Cell-Level Manipulation"
+    }
+  ]
+}

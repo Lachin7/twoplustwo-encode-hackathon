@@ -258,6 +258,12 @@ def test_agent_loop() -> None:
     live.save(pred)
     scored = score_task(task, pred, bool(soffice_path()), tmp / "re-ag")
     check("python loop fills B1:B5", scored.get("pass") is True, str(scored))
+    safe = run_python(
+        "import math\nprint(repr(type(1)), isinstance(1, int), hasattr(math, 'sqrt'))",
+        live,
+        task,
+    )
+    check("common builtins and safe import work", "<class 'int'>" in safe and "True True" in safe, safe)
     check("blocked import", "ERROR" in run_python("import os\nprint(os.getcwd())", live, task))
     dumped = run_python("print(sorted(task.keys())); print(task)", live, task)
     check("task has no golden path", "golden" not in dumped and "xlsx" not in dumped, dumped)
@@ -292,6 +298,7 @@ def test_focus_and_thin() -> None:
         "data_position": "A150",
     }
     dump = serialize_workbook(init, task=task)
+    check("sheet name excludes display label", "### Sheet: Sheet1\nWindow: overview" in dump)
     check("overview still has A1", "top" in dump)
     check("focus includes far column", "far-col" in dump)
     check("focus includes far data row", "far-row" in dump)
@@ -327,6 +334,47 @@ def test_focus_and_thin() -> None:
     small = {**large, "answer_position": "A1:A7"}
     write_output(small, SpreadsheetAnswer(cells=[CellValue(cell="A1", value=1)]), pred)
     check("small task never thin", output_is_thin(small, pred) is False)
+
+    two = tmp / "two.xlsx"
+    wb3 = openpyxl.Workbook()
+    a = wb3.active
+    a.title = "PL"
+    a["A1"] = None
+    b = wb3.create_sheet("ST")
+    b["A1"] = None
+    wb3.save(two)
+    multi = {
+        "id": "two-sheet",
+        "instruction": "x",
+        "init_xlsx": str(two),
+        "golden_xlsx": str(two),
+        "answer_position": "PL'!A1,ST'!A1",
+        "answer_sheet": "PL",
+    }
+    write_output(
+        multi,
+        SpreadsheetAnswer(cells=[CellValue(cell="A1", value="left"), CellValue(cell="A1", value="right")]),
+        pred,
+    )
+    got = openpyxl.load_workbook(pred)
+    check("multi-sheet A1 not collapsed", got["PL"]["A1"].value == "left" and got["ST"]["A1"].value == "right",
+          f"PL={got['PL']['A1'].value!r} ST={got['ST']['A1'].value!r}")
+    write_output(
+        multi,
+        SpreadsheetAnswer(cells=[
+            CellValue(cell="ST!A1", value="right"),
+            CellValue(cell="PL!A1", value="left"),
+        ]),
+        pred,
+    )
+    got2 = openpyxl.load_workbook(pred)
+    check(
+        "Sheet!A1 keys win even out of order",
+        got2["PL"]["A1"].value == "left" and got2["ST"]["A1"].value == "right",
+        f"PL={got2['PL']['A1'].value!r} ST={got2['ST']['A1'].value!r}",
+    )
+    got.close()
+    got2.close()
     shutil.rmtree(tmp, ignore_errors=True)
 
 

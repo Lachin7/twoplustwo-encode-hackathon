@@ -86,6 +86,16 @@ def graded_count(task: dict, wb=None) -> int:
 
 def build_prompt(task: dict) -> str:
     n = graded_count(task)
+    # Agent tasks can inspect the live workbook. A smaller preview prevents wide,
+    # multi-sheet workbooks from exceeding Qwen's context window before turn 1.
+    workbook = serialize_workbook(
+        task["init_xlsx"],
+        max_rows=40 if n > 20 else 120,
+        max_cols=30,
+        task=task,
+    )
+    if len(workbook) > 100_000:
+        workbook = workbook[:100_000] + "\n\n[Preview truncated; inspect wb directly with Python.]"
     strategy = (
         f"{n} graded cells — one relative formula per column or row on the first answer cell, not a value dump."
         if n > 20
@@ -93,7 +103,7 @@ def build_prompt(task: dict) -> str:
     )
     return (
         f"## Instruction\n{task['instruction']}\n\n"
-        f"## Workbook\n{serialize_workbook(task['init_xlsx'], task=task)}\n\n"
+        f"## Workbook\n{workbook}\n\n"
         f"## Answer range\nSheet: {task.get('answer_sheet') or 'active sheet'}\n"
         f"Cells: {task['answer_position']}\n{strategy}\n"
     )
@@ -247,21 +257,38 @@ def parse_answer(text: str) -> SpreadsheetAnswer:
         return SpreadsheetAnswer.model_validate(json.loads(repaired))
 
 
+def _split_cell(cell: str) -> tuple[str | None, str]:
+    text = cell.strip().replace("'", "")
+    if "!" in text:
+        sheet, coord = text.rsplit("!", 1)
+        return sheet, coord.upper()
+    return None, text.upper()
+
+
+def _sheet_key(sheet: str | None) -> str:
+    return (sheet or "").strip().upper()
+
+
 def align_answer(task: dict, answer: SpreadsheetAnswer, wb=None) -> SpreadsheetAnswer:
-    """Write into the graded range. Use the model's keys when they match; otherwise zip in order."""
-    expected = [coord.upper() for _sheet, coord in answer_cells(task, wb)]
-    raw = [(cell.cell.upper(), coerce_cell_value(cell.value)) for cell in answer.cells]
-    by_key = {coord: value for coord, value in raw}
-    if expected and all(coord in by_key for coord in expected):
-        cells = [CellValue(cell=coord, value=by_key[coord]) for coord in expected]
+    """Map model cells onto the graded range. Prefer Sheet!A1; zip only if keys are bare."""
+    expected = [(sheet, coord.upper()) for sheet, coord in answer_cells(task, wb)]
+    raw = [(*_split_cell(cell.cell), coerce_cell_value(cell.value)) for cell in answer.cells]
+    coords = [coord for _sheet, coord in expected]
+    unique = len(coords) == len(set(coords))
+    by_sheet = {(_sheet_key(sheet), coord): value for sheet, coord, value in raw if sheet}
+    by_coord = {coord: value for _sheet, coord, value in raw}
+    if expected and all((_sheet_key(sheet), coord) in by_sheet for sheet, coord in expected):
+        cells = [CellValue(cell=coord, value=by_sheet[(_sheet_key(sheet), coord)]) for sheet, coord in expected]
+    elif unique and expected and all(coord in by_coord for coord in coords):
+        cells = [CellValue(cell=coord, value=by_coord[coord]) for coord in coords]
     elif expected and raw:
         cells = [
-            CellValue(cell=coord, value=raw[i][1])
-            for i, coord in enumerate(expected)
+            CellValue(cell=coord, value=raw[i][2])
+            for i, (_sheet, coord) in enumerate(expected)
             if i < len(raw)
         ]
     else:
-        cells = [CellValue(cell=coord, value=value) for coord, value in raw]
+        cells = [CellValue(cell=coord, value=value) for _sheet, coord, value in raw]
     return SpreadsheetAnswer(cells=cells)
 
 
@@ -287,36 +314,47 @@ def _col_row(coord: str) -> tuple[str, int]:
 
 
 def _expand_line(
-    out: dict[str, object],
+    out: dict[tuple[str | None, str], object],
+    sheet: str | None,
     cells: list[tuple[str, int, int]],
     axis: str,
 ) -> None:
     """cells are (coord, row, col_index). Exactly one formula seed fills the line."""
-    seeds = [(coord, row, col) for coord, row, col in cells if _is_formula(out.get(coord))]
+
+    def key(coord: str) -> tuple[str | None, str]:
+        if (sheet, coord) in out:
+            return (sheet, coord)
+        if (None, coord) in out:
+            return (None, coord)
+        return (sheet, coord)
+
+    seeds = [(coord, row, col) for coord, row, col in cells if _is_formula(out.get(key(coord)))]
     if len(seeds) != 1:
         return
     seed, seed_row, seed_col = seeds[0]
-    formula = normalize_formula(out[seed])
+    formula = normalize_formula(out[key(seed)])
     overwrite = len(cells) > 20
     for coord, row, col in cells:
         if coord == seed:
             continue
-        cur = out.get(coord)
-        if cur is not None and coord in out and not (overwrite and not _is_formula(cur)):
+        k = key(coord)
+        cur = out.get(k)
+        if k in out and cur is not None and not (overwrite and not _is_formula(cur)):
             continue
-        if axis == "col":
-            out[coord] = _shift_formula(formula, row - seed_row, 0)
-        else:
-            out[coord] = _shift_formula(formula, 0, col - seed_col)
+        out[k] = _shift_formula(formula, row - seed_row, 0) if axis == "col" else _shift_formula(formula, 0, col - seed_col)
 
 
-def expand_formulas(expected: list[tuple[str, str]], given: dict[str, object]) -> dict[str, object]:
+def expand_formulas(expected: list[tuple[str, str]], given: dict) -> dict:
     """Fill the dominant axis from a single relative formula. Overwrite junk only on long lines.
 
     Tall ranges fill down only. Wide ranges fill right only. Never both — inventing a
     second column from the first on a 2-col block is a common way to fail a pass.
+    Keys may be coord strings or (sheet, coord) tuples.
     """
-    out = dict(given)
+    if not given:
+        return given
+    tuple_in = isinstance(next(iter(given)), tuple)
+    out: dict[tuple[str | None, str], object] = dict(given) if tuple_in else {(None, k): v for k, v in given.items()}
     by_col: dict[tuple[str | None, str], list[tuple[str, int, int]]] = {}
     by_row: dict[tuple[str | None, int], list[tuple[str, int, int]]] = {}
     for sheet, coord in expected:
@@ -333,12 +371,12 @@ def expand_formulas(expected: list[tuple[str, str]], given: dict[str, object]) -
         if max_col >= max_row:
             for cells in col_groups:
                 cells.sort(key=lambda item: item[1])
-                _expand_line(out, cells, "col")
+                _expand_line(out, sheet, cells, "col")
         else:
             for cells in row_groups:
                 cells.sort(key=lambda item: item[2])
-                _expand_line(out, cells, "row")
-    return out
+                _expand_line(out, sheet, cells, "row")
+    return out if tuple_in else {coord: value for (_sheet, coord), value in out.items()}
 
 
 def output_is_thin(task: dict, out_path: Path) -> bool:
@@ -368,13 +406,20 @@ def write_output(task: dict, answer: SpreadsheetAnswer, out_path: Path) -> None:
     shutil.copy(task["init_xlsx"], out_path)
     wb = openpyxl.load_workbook(out_path)
     aligned = align_answer(task, answer, wb)
-    expected = list(answer_cells(task, wb))
-    cells = {cell.cell.upper(): normalize_formula(cell.value) if isinstance(cell.value, str) else cell.value for cell in aligned.cells}
+    expected = [(sheet, coord.upper()) for sheet, coord in answer_cells(task, wb)]
+    cells = {}
+    for i, (sheet, coord) in enumerate(expected):
+        if i >= len(aligned.cells):
+            break
+        value = aligned.cells[i].value
+        cells[(sheet, coord)] = normalize_formula(value) if isinstance(value, str) else value
     cells = expand_formulas(expected, cells)
     for sheet, coord in expected:
+        key = (sheet, coord)
+        if key not in cells:
+            continue
         ws = wb[sheet] if sheet and sheet in wb.sheetnames else wb.active
-        if coord in cells:
-            set_cell_value(ws, coord, cells[coord])
+        set_cell_value(ws, coord, cells[key])
     wb.save(out_path)
 
 
@@ -400,7 +445,14 @@ def log(out_dir: Path, line: str) -> None:
             f.write(line + "\n")
 
 
-async def predict_task(complete, model: str, task: dict, out_dir: Path) -> str:
+async def predict_task(
+    complete,
+    model: str,
+    task: dict,
+    out_dir: Path,
+    *,
+    record_prediction: bool = True,
+) -> str:
     """One model call, retry on bad JSON or a too-thin fill. On total failure copy the init workbook.
 
     `complete(prompt)` is an async function returning (text, input_tokens, output_tokens).
@@ -411,7 +463,7 @@ async def predict_task(complete, model: str, task: dict, out_dir: Path) -> str:
     last_error: Exception | None = None
     extra = ""
     wrote_ok = False
-    for step in range(1, 3):
+    for step in range(1, 4):
         trace = {"step": step, "model": model, "prompt": None, "response": None,
                  "input_tokens": None, "output_tokens": None, "latency_ms": None, "error": None}
         started = time.time()
@@ -439,7 +491,11 @@ async def predict_task(complete, model: str, task: dict, out_dir: Path) -> str:
             break
     if last_error is not None and not wrote_ok:
         shutil.copy(task["init_xlsx"], out)
-    append_jsonl(out_dir / "predictions.jsonl", {"id": task["id"], "output": f"outputs/{task['id']}.xlsx", "status": status})
+    if record_prediction:
+        append_jsonl(
+            out_dir / "predictions.jsonl",
+            {"id": task["id"], "output": f"outputs/{task['id']}.xlsx", "status": status},
+        )
     return status
 
 

@@ -204,7 +204,8 @@ def _sheet_window(ws, min_row, min_col, max_row, max_col, label):
         return None
     header = "\t".join([""] + [get_column_letter(c) for c in range(min_col, max_col + 1)])
     lines = [
-        f"### Sheet: {ws.title} {label} (rows {min_row}-{max_row}, cols {get_column_letter(min_col)}-{get_column_letter(max_col)})",
+        f"### Sheet: {ws.title}",
+        f"Window: {label} (rows {min_row}-{max_row}, cols {get_column_letter(min_col)}-{get_column_letter(max_col)})",
         header,
     ]
     for r in range(min_row, max_row + 1):
