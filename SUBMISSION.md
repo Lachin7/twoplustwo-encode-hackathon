@@ -7,7 +7,7 @@
   - Lachin7
   - Flavio
   - Royantha
-  - Kris
+  - Litatolvy
 - Repo URL: https://github.com/Lachin7/twoplustwo-encode-hackathon
 
 ## What we built and why
