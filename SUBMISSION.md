@@ -30,7 +30,7 @@ uv run evaluate.py --predictions ship/full400-masked-16k/predictions.jsonl --all
 ```
 
 ```json
-{"items": 400, "graded": 399, "missing": 1, "errors": 0, "pass_rate": 0.715, "cell_accuracy": 0.7976, "pass_rate_cell_level": 0.7345, "pass_rate_sheet_level": 0.672}
+{"items": 400, "graded": 400, "missing": 0, "errors": 0, "pass_rate": 0.715, "cell_accuracy": 0.7979, "pass_rate_cell_level": 0.7345, "pass_rate_sheet_level": 0.672}
 ```
 
 ## Your run on the 400

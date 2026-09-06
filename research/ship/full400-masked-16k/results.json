@@ -1,11 +1,11 @@
 {
   "summary": {
     "items": 400,
-    "graded": 399,
-    "missing": 1,
+    "graded": 400,
+    "missing": 0,
     "errors": 0,
     "pass_rate": 0.715,
-    "cell_accuracy": 0.7976,
+    "cell_accuracy": 0.7979,
     "pass_rate_cell_level": 0.7345,
     "pass_rate_sheet_level": 0.672
   },
@@ -5096,11 +5096,39 @@
       "type": "Cell-Level Manipulation"
     },
     {
-      "id": "567-21",
-      "type": "Sheet-Level Manipulation",
-      "status": "missing",
+      "status": "graded",
       "cells": 182,
-      "correct": 0
+      "correct": 101,
+      "pass": false,
+      "mismatches": [
+        {
+          "cell": "Sheet1!A3",
+          "expected": 1997002667,
+          "actual": null
+        },
+        {
+          "cell": "Sheet1!B3",
+          "expected": 910368891,
+          "actual": null
+        },
+        {
+          "cell": "Sheet1!E3",
+          "expected": "2019-05-01 00:00:00",
+          "actual": null
+        },
+        {
+          "cell": "Sheet1!F3",
+          "expected": "2020-05-13 00:00:00",
+          "actual": null
+        },
+        {
+          "cell": "Sheet1!G3",
+          "expected": 104.08,
+          "actual": null
+        }
+      ],
+      "id": "567-21",
+      "type": "Sheet-Level Manipulation"
     },
     {
       "status": "graded",
