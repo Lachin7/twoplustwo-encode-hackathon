@@ -29,10 +29,8 @@ cd research
 uv run evaluate.py --predictions ship/full400-masked-16k/predictions.jsonl --all --out ship/full400-masked-16k/results.json
 ```
 
-Official `--all` summary (`items` must be 400) is still landing. Completed-only on 398 tasks:
-
 ```json
-{"items": 398, "graded": 398, "missing": 0, "errors": 0, "pass_rate": 0.7186, "cell_accuracy": 0.7982, "pass_rate_cell_level": 0.7345, "pass_rate_sheet_level": 0.6829}
+{"items": 400, "graded": 398, "missing": 2, "errors": 0, "pass_rate": 0.715, "cell_accuracy": 0.7957, "pass_rate_cell_level": 0.7345, "pass_rate_sheet_level": 0.672}
 ```
 
 ## Your run on the 400
