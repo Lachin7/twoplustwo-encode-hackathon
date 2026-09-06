@@ -3,17 +3,36 @@ research/private/
 research/submissions/*
 !research/submissions/.gitkeep
 research/train/logs/
-# local ad-hoc eval dumps; keep shipped holdout scores under research/ship/
 /results.json
 __pycache__/
 .env
 research/.env
 .venv/
 tinker-cookbook/
+research/YlookupEncodeHackathon.pdf
+research/data/rl/
+research/data/all_data_912_v0.1/
+
+# local / leftover run dirs — only ship the final 400 + the eval-80 we cite
 research/ship/outputs/
 research/ship/traces/
 research/ship/predictions.jsonl
 research/ship/run.log
 research/ship/sft2-eval80/
 research/ship/sft320-eval80/
+research/ship/sft-*/
+research/ship/sft-small-*/
 research/ship/smoke/
+research/ship/eval80-smoke/
+research/ship/eval80-masked-16k/
+research/ship/eval80-masked-final-harness/
+research/ship/eval80-base/
+research/ship/full400-clean-agent-v2/
+research/ship/base-400/
+research/ship/base-400-xhigh/
+research/ship/train-traces-base/
+research/ship/*-smoke*/
+research/ship/harness*/
+research/ship/status-error*/
+research/ship/fencefix*/
+research/ship/verify-agent/

@@ -14,4 +14,4 @@ RUN uv sync --frozen --extra tinker --no-install-project
 COPY research/baseline ./baseline
 COPY research/sb.py ./
 ENTRYPOINT ["uv", "run", "--frozen", "--extra", "tinker", "baseline/tinker_predict.py"]
-CMD ["--dataset-dir", "/data", "--out-dir", "/out", "--base-model", "Qwen/Qwen3.8-27B", "--renderer", "qwen3_8_xhigh_reasoning", "--agent", "auto"]
+CMD ["--dataset-dir", "/data", "--out-dir", "/out", "--base-model", "Qwen/Qwen3.8-27B", "--renderer", "qwen3_8_xhigh_reasoning", "--agent", "auto", "--model-path", "tinker://600ccd82-58a6-5eee-b276-7c212844dd0d:train:0/sampler_weights/final"]

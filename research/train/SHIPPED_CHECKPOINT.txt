@@ -1,14 +1,15 @@
-# Shipped SFT checkpoint (eval-80 pass_rate 0.45)
+# Shipped LoRA (masked agent SFT)
 
-sampler_path=tinker://6fddcac0-b2a6-545a-b7e4-b3886d94d9d6:train:0/sampler_weights/final
+sampler_path=tinker://600ccd82-58a6-5eee-b276-7c212844dd0d:train:0/sampler_weights/final
 base_model=Qwen/Qwen3.8-27B
 renderer=qwen3_8_xhigh_reasoning
-lora_rank=32
-lr=4e-4
+lora_rank=16
+lr=3e-6
 epochs=1
-data=data/sft/spreadsheet_sft.jsonl
-source=oracle
-eval_artifact=ship/sft-eval80
+batch_size=4
+train_on_what=customized
+data=data/sft/sft_train_agent_clean.jsonl
+source=passing train-320 agent traces; no eval-80 ids; no golden values in the chat
+eval_artifact=ship/eval80-clean-agent-v2  # 62/80 = 0.775 vs base+agent 0.7625
 
-# Do not ship / use:
-# tinker://f1a81030-828d-5c96-bd28-6c1782ec07b4:train:0/sampler_weights/final  (sft2 / oracle-windowed, ~0.275)
+# Do not ship older oracle / mixed-trace LoRAs.

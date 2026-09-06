@@ -100,7 +100,7 @@ def main() -> None:
     args = parse_args()
     jsonl = Path(args.jsonl)
     if not jsonl.exists():
-        raise SystemExit(f"missing {jsonl}; run train/teacher_label.py --oracle")
+        raise SystemExit(f"missing {jsonl}; run train/build_clean_agent_sft.py")
     renderer_name = args.renderer or get_recommended_renderer_name(args.model)
     if args.raw_jsonl:
         pass

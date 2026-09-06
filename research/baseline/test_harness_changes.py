@@ -212,7 +212,7 @@ def test_real_tasks_mocked() -> None:
 
 def test_agent_loop() -> None:
     print("\n[6] python tool loop (no Tinker)")
-    from agent import parse_agent_turn, run_python, should_use_agent
+    from agent import as_python, parse_agent_turn, run_python, should_use_agent
 
     kind, payload = parse_agent_turn('{"tool":"python","code":"print(1)"}')
     check("parse python tool", kind == "python" and "print" in payload)
@@ -220,6 +220,24 @@ def test_agent_loop() -> None:
     check("parse done", kind == "done")
     kind, payload = parse_agent_turn('```python\nprint(wb.sheetnames)\n```')
     check("parse fence as python", kind == "python" and "sheetnames" in payload)
+
+    # Models paste the sheet back inside a fence mid-reasoning; execing that as
+    # Python used to burn a turn on IndentationError.
+    check("sheet dump in a fence is not code", as_python("\tA\tB\tC\n1\tx\ty\tz\n") is None)
+    kind, payload = parse_agent_turn(
+        "here is the sheet\n```\n\tA\tB\n1\tx\ty\n```\nand the code\n```python\nprint(1)\n```"
+    )
+    check("tagged fence beats a data fence", kind == "python" and payload.strip() == "print(1)", repr(payload))
+    kind, payload = parse_agent_turn("```python\nprint(1)\n```\nactually\n```python\nprint(2)\n```")
+    check("last fence wins", payload.strip() == "print(2)", repr(payload))
+    kind, payload = parse_agent_turn('```\njunk\n```\n{"tool":"python","code":"print(42)"}')
+    check("json tool beats a stray fence", kind == "python" and payload == "print(42)", repr(payload))
+    try:
+        parse_agent_turn("Let me reason at length and never reach a conclusion.")
+        check("prose with no tool call raises", False)
+    except ValueError:
+        check("prose with no tool call raises", True)
+    check("indented code is dedented", as_python("    print(1)\n    print(2)\n") is not None)
 
     tmp = Path(tempfile.mkdtemp())
     init = tmp / "init.xlsx"
@@ -265,6 +283,11 @@ def test_agent_loop() -> None:
     )
     check("common builtins and safe import work", "<class 'int'>" in safe and "True True" in safe, safe)
     check("blocked import", "ERROR" in run_python("import os\nprint(os.getcwd())", live, task))
+    check(
+        "non-python reaches the model as advice, not a crash",
+        run_python("\tA\tB\n1\tx\ty\n", live, task).startswith("ERROR: that is not valid Python"),
+    )
+    check("indented code still runs", "hi" in run_python("    print('hi')", live, task))
     dumped = run_python("print(sorted(task.keys())); print(task)", live, task)
     check("task has no golden path", "golden" not in dumped and "xlsx" not in dumped, dumped)
     check("task has no init path", "init_xlsx" not in dumped, dumped)

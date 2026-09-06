@@ -89,7 +89,7 @@ Reference numbers for one-shot prompting, values not formulas, on all 400: DeepS
 
 ## Docker
 
-The pipeline executes model-written Python on large ranges. Judges run the repo-root `Dockerfile`: `/data` in, `/out` out. Env: `TINKER_API_KEY`, `TINKER_PROJECT_ID`. See [SUBMISSION.md](../SUBMISSION.md).
+The pipeline executes model-written Python on large ranges. Judges run the repo-root `Dockerfile`: `/data` in, `/out` out. Env: `TINKER_API_KEY`, `TINKER_PROJECT_ID`. The image loads the masked-agent LoRA (`tinker://600ccd82-…/sampler_weights/final`). See [SUBMISSION.md](../SUBMISSION.md).
 
 ## Submit
 

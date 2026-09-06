@@ -36,10 +36,8 @@ from sb import answer_cells
 
 AGENT_CELL_THRESHOLD = 20
 MAX_TURNS = 10
-# Reasoning that runs to the sampling cap never reaches a tool call, so the turn is
-# lost. Capping each turn below the context limit trades a little headroom for more
-# turns at roughly the same total token spend.
-AGENT_MAX_TOKENS = 10240
+# Keep the full 16k completion. A 10k cap truncated winning tool turns on the 400-run.
+AGENT_MAX_TOKENS = 16384
 EXEC_TIMEOUT_S = 20
 RESULT_CHARS = 4000
 
