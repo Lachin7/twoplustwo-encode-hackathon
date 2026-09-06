@@ -5,6 +5,9 @@
 - Team name: spreadsheet-tinker
 - Members, one GitHub handle per line:
   - Lachin7
+  - Flavio
+  - Royantha
+  - Kris
 - Repo URL: https://github.com/Lachin7/twoplustwo-encode-hackathon
 
 ## What we built and why
