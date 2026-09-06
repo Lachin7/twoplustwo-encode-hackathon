@@ -1,0 +1,7 @@
+*
+!research/pyproject.toml
+!research/uv.lock
+!research/sb.py
+!research/baseline/
+research/baseline/__pycache__/
+research/baseline/*.pyc

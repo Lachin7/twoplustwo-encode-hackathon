@@ -40,6 +40,7 @@ def parse_args() -> argparse.Namespace:
     p.add_argument("--results", help="write evaluate.py JSON here")
     p.add_argument("--no-recalc", action="store_true")
     p.add_argument("--resume", action="store_true")
+    p.add_argument("--agent", choices=("off", "auto", "always"), default="auto")
     return p.parse_args()
 
 
@@ -62,6 +63,7 @@ def main() -> None:
         cmd.extend(["--model-path", args.model_path])
     if args.resume:
         cmd.append("--resume")
+    cmd.extend(["--agent", args.agent])
     if not args.all:
         if args.ids:
             cmd.extend(["--ids", args.ids])

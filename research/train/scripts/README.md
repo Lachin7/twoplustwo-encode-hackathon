@@ -1,3 +1,37 @@
+# Training scripts
+
+## Overnight (Tinker)
+
+From `research/`:
+
+```sh
+chmod +x train/scripts/run_overnight*.sh train/scripts/run_morning_eval.sh
+./train/scripts/run_overnight.sh          # A+B+C in parallel
+./train/scripts/run_overnight.sh rl       # A only
+./train/scripts/run_overnight.sh traces   # B only
+./train/scripts/run_overnight.sh sdft     # C only
+```
+
+- **A** `run_overnight_rl.sh` — RL from **base** + KL 0.05 + `--recalc`. Logs: `train/logs/rl-base-kl`
+- **B** `run_overnight_trace_sft.sh` — train-only base+agent traces → pass-only SFT at 1e-5 on every assistant turn. Logs: `train/logs/sft-train-traces`
+- **C** `run_overnight_sdft.sh` — SDFT on `sft_512_case1.jsonl` (gold is teacher ICL only). Logs: `train/logs/sdft-case1`
+
+Do not point any of these at an oracle SFT checkpoint.
+
+Morning (eval-80 + agent vs base 76.2%):
+
+```sh
+# auto: waits for each overnight final, then evals one-by-one
+./train/scripts/watch_and_eval.sh
+
+# or manual once you have a path:
+MODEL_PATH=tinker://.../sampler_weights/final NAME=rl-base-kl ./train/scripts/run_morning_eval.sh
+```
+
+If sheet-level drops, discard the LoRA and ship base+agent.
+
+---
+
 # Gemini labelling (Google AI Studio)
 
 Pass-only teacher traces for train-small. No goldens in the user prompt.

@@ -89,8 +89,8 @@ Reference numbers for one-shot prompting, values not formulas, on all 400: DeepS
 
 ## Docker
 
-If your pipeline is an agent or executes model-written code, it runs inside a Docker container you write. The judges mount a dataset dir read-only at `/data` and take `/out`. See [SUBMISSION.md](SUBMISSION.md).
+The pipeline executes model-written Python on large ranges. Judges run the repo-root `Dockerfile`: `/data` in, `/out` out. Env: `TINKER_API_KEY`, `TINKER_PROJECT_ID`. See [SUBMISSION.md](../SUBMISSION.md).
 
 ## Submit
 
-See [SUBMISSION.md](SUBMISSION.md).
+See [SUBMISSION.md](../SUBMISSION.md).

@@ -1,6 +1,7 @@
 """Shared by llm_predict.py and tinker_predict.py: prompt, answer schema, output files, traces."""
 
 import asyncio
+import datetime
 import json
 import os
 import re
@@ -22,18 +23,22 @@ ENV_PATH = Path(__file__).resolve().parent.parent / ".env"
 
 SYSTEM_PROMPT = (
     "You are a spreadsheet expert. You get a serialized workbook and a user instruction. "
-    "Compute the final values the answer range must contain after the instruction is applied. "
-    "Return one entry per cell in the answer range. Use null for cells that must be empty. "
-    "Return plain values, not formulas."
+    "Fill the answer range. Literals and Excel formulas (strings starting with =) are both fine. "
+    "For a long column or row, one relative formula on the first cell is enough — the harness "
+    "fills the rest and LibreOffice recalculates. Use null for cells that must be empty."
 )
 FORMAT_HINT = (
     '\n\nReply with JSON only, no prose, in this shape: '
-    '{"cells": [{"cell": "B6", "value": 42}, {"cell": "B7", "value": null}]}'
+    '{"cells": [{"cell": "B6", "value": "=A6*2"}, {"cell": "C2", "value": 42}]}'
 )
 RETRY_HINT = (
     "\n\nYour previous reply was not valid JSON. "
-    "Reply with JSON only, no prose, in this shape: "
-    '{"cells": [{"cell": "B6", "value": 42}, {"cell": "B7", "value": null}]}'
+    "Reply with JSON only, no prose: "
+    '{"cells": [{"cell": "B6", "value": "=A6*2"}]}'
+)
+THIN_HINT = (
+    "\n\nThat JSON covered too few answer cells. "
+    "Return one relative formula on the first cell of each column or row, or every cell."
 )
 
 _IO_LOCK = threading.Lock()
@@ -68,12 +73,83 @@ def selected_tasks(dataset_dir: Path, ids: set[str] | None) -> list[dict]:
     return tasks if ids is None else [t for t in tasks if t["id"] in ids]
 
 
+def graded_count(task: dict, wb=None) -> int:
+    own = wb is None
+    if own:
+        wb = openpyxl.load_workbook(task["init_xlsx"], data_only=True)
+    try:
+        return len(answer_cells(task, wb))
+    finally:
+        if own:
+            wb.close()
+
+
 def build_prompt(task: dict) -> str:
+    n = graded_count(task)
+    strategy = (
+        f"{n} graded cells — one relative formula per column or row on the first answer cell, not a value dump."
+        if n > 20
+        else f"{n} graded cells — literals or short formulas are both fine."
+    )
     return (
         f"## Instruction\n{task['instruction']}\n\n"
-        f"## Workbook\n{serialize_workbook(task['init_xlsx'])}\n\n"
-        f"## Answer range\nSheet: {task.get('answer_sheet') or 'active sheet'}\nCells: {task['answer_position']}\n"
+        f"## Workbook\n{serialize_workbook(task['init_xlsx'], task=task)}\n\n"
+        f"## Answer range\nSheet: {task.get('answer_sheet') or 'active sheet'}\n"
+        f"Cells: {task['answer_position']}\n{strategy}\n"
     )
+
+
+_DATE_FORMATS = (
+    "%Y-%m-%d %H:%M:%S",
+    "%Y-%m-%d %H:%M",
+    "%Y-%m-%d",
+    "%m/%d/%Y %H:%M:%S",
+    "%m/%d/%Y %H:%M",
+    "%m/%d/%Y",
+    "%d-%b-%Y",
+    "%d-%b-%y",
+)
+_TIME_FORMATS = ("%H:%M:%S", "%H:%M")
+
+
+def parse_writable_value(value, number_format: str = "General"):
+    """Turn date/time strings (and duration formats) into Excel-native types."""
+    fmt = (number_format or "General").lower()
+    duration = "[h]" in fmt or "[hh]" in fmt
+    if isinstance(value, datetime.datetime) and value.year in (1899, 1900) and value.date() <= datetime.date(1900, 1, 1):
+        if value.time() != datetime.time():
+            return datetime.timedelta(hours=value.hour, minutes=value.minute, seconds=value.second) if duration else value.time()
+    if not isinstance(value, str):
+        if duration and isinstance(value, (int, float)) and 0 <= float(value) < 10:
+            return datetime.timedelta(days=float(value))
+        if ("h" in fmt or "mm" in fmt) and "y" not in fmt and isinstance(value, (int, float)) and 0 < float(value) < 1:
+            return (datetime.datetime(1899, 12, 30) + datetime.timedelta(days=float(value))).time()
+        return value
+    if value.lstrip().startswith("="):
+        return normalize_formula(value)
+    text = value.strip()
+    if not text:
+        return None
+    if text.lower().startswith("1 day, "):
+        text = text.split(",", 1)[1].strip()
+        try:
+            clock = datetime.datetime.strptime(text, "%H:%M:%S")
+            return datetime.timedelta(days=1, hours=clock.hour, minutes=clock.minute, seconds=clock.second)
+        except ValueError:
+            pass
+    for fmt_s in _DATE_FORMATS:
+        try:
+            return datetime.datetime.strptime(text, fmt_s)
+        except ValueError:
+            continue
+    for fmt_s in _TIME_FORMATS:
+        try:
+            clock = datetime.datetime.strptime(text, fmt_s)
+            delta = datetime.timedelta(hours=clock.hour, minutes=clock.minute, seconds=clock.second)
+            return delta if duration else clock.time()
+        except ValueError:
+            continue
+    return value
 
 
 def coerce_cell_value(value: str | int | float | bool | None) -> str | int | float | bool | None:
@@ -87,6 +163,10 @@ def coerce_cell_value(value: str | int | float | bool | None) -> str | int | flo
         stripped = value.strip()
         if stripped == "" or stripped.lower() in ("null", "none"):
             return None
+        if stripped.startswith("="):
+            return stripped
+        if stripped.isdigit() and stripped.startswith("0") and stripped != "0":
+            return stripped
         try:
             number = float(stripped.replace(",", ""))
             return int(number) if number.is_integer() else number
@@ -95,13 +175,76 @@ def coerce_cell_value(value: str | int | float | bool | None) -> str | int | flo
     return value
 
 
+_XLFN = (
+    "XLOOKUP", "XMATCH", "UNIQUE", "SORT", "SORTBY", "SEQUENCE",
+    "LET", "LAMBDA", "CHOOSECOLS", "CHOOSEROWS", "HSTACK", "VSTACK",
+    "TOCOL", "TOROW", "TAKE", "DROP", "TEXTSPLIT", "TEXTBEFORE", "TEXTAFTER",
+    "WRAPROWS", "WRAPCOLS",
+)
+
+
+def normalize_formula(value):
+    if not isinstance(value, str):
+        return value
+    text = value.strip()
+    if not text.startswith("="):
+        return value
+    text = re.sub(r"(?<!_xlfn\._xlws\.)\bFILTER\s*\(", "_xlfn._xlws.FILTER(", text, flags=re.I)
+    for name in _XLFN:
+        text = re.sub(rf"(?<!_xlfn\.)\b{name}\s*\(", rf"_xlfn.{name}(", text, flags=re.I)
+    return text
+
+
+def _col_index(col: str) -> int:
+    n = 0
+    for ch in col.upper():
+        n = n * 26 + (ord(ch) - 64)
+    return n
+
+
+def _col_letters(index: int) -> str:
+    out = ""
+    n = index
+    while n > 0:
+        n, rem = divmod(n - 1, 26)
+        out = chr(65 + rem) + out
+    return out
+
+
+def _shift_formula(formula: str, row_delta: int = 0, col_delta: int = 0) -> str:
+    if row_delta == 0 and col_delta == 0:
+        return formula
+
+    def repl(m: re.Match) -> str:
+        abs_col, col, abs_row, row = m.group(1), m.group(2), m.group(3), m.group(4)
+        new_col = col if abs_col or col_delta == 0 else _col_letters(_col_index(col) + col_delta)
+        new_row = row if abs_row or row_delta == 0 else str(int(row) + row_delta)
+        return f"{abs_col}{new_col}{abs_row}{new_row}"
+
+    return re.sub(r"(\$?)([A-Za-z]{1,3})(\$?)(\d+)", repl, formula)
+
+
+def _is_formula(value) -> bool:
+    return isinstance(value, str) and value.lstrip().startswith("=")
+
+
 def parse_answer(text: str) -> SpreadsheetAnswer:
-    """First {...} block in the reply. Thinking models wrap it in prose or code fences."""
+    """JSON object from a reply. Thinking models wrap it in prose, fences, or extra tokens."""
     text = re.sub(r"<think>.*?</think>", "", text, flags=re.S)
-    start, end = text.find("{"), text.rfind("}")
-    if start < 0 or end < 0:
+    text = re.sub(r"```(?:json)?\s*", "", text, flags=re.I)
+    start = text.find("{")
+    if start < 0:
         raise ValueError(f"no JSON object in reply: {text[:120]!r}")
-    return SpreadsheetAnswer.model_validate(json.loads(text[start:end + 1]))
+    snippet = text[start:]
+    try:
+        payload, _ = json.JSONDecoder().raw_decode(snippet)
+        return SpreadsheetAnswer.model_validate(payload)
+    except json.JSONDecodeError:
+        end = snippet.rfind("}")
+        if end < 0:
+            raise ValueError(f"no JSON object in reply: {text[:120]!r}") from None
+        repaired = re.sub(r",\s*([}\]])", r"\1", snippet[: end + 1])
+        return SpreadsheetAnswer.model_validate(json.loads(repaired))
 
 
 def align_answer(task: dict, answer: SpreadsheetAnswer, wb=None) -> SpreadsheetAnswer:
@@ -124,21 +267,111 @@ def align_answer(task: dict, answer: SpreadsheetAnswer, wb=None) -> SpreadsheetA
 
 def set_cell_value(ws, coord: str, value) -> None:
     cell = ws[coord]
+    target = cell
     if isinstance(cell, MergedCell):
+        target = None
         for merged in ws.merged_cells.ranges:
             if coord in merged:
-                ws.cell(merged.min_row, merged.min_col).value = value
-                return
+                target = ws.cell(merged.min_row, merged.min_col)
+                break
+        if target is None:
+            return
+    fmt = getattr(target, "number_format", "General")
+    target.value = parse_writable_value(value, fmt)
+
+
+def _col_row(coord: str) -> tuple[str, int]:
+    col = "".join(ch for ch in coord if ch.isalpha())
+    row = int("".join(ch for ch in coord if ch.isdigit()))
+    return col, row
+
+
+def _expand_line(
+    out: dict[str, object],
+    cells: list[tuple[str, int, int]],
+    axis: str,
+) -> None:
+    """cells are (coord, row, col_index). Exactly one formula seed fills the line."""
+    seeds = [(coord, row, col) for coord, row, col in cells if _is_formula(out.get(coord))]
+    if len(seeds) != 1:
         return
-    ws[coord] = value
+    seed, seed_row, seed_col = seeds[0]
+    formula = normalize_formula(out[seed])
+    overwrite = len(cells) > 20
+    for coord, row, col in cells:
+        if coord == seed:
+            continue
+        cur = out.get(coord)
+        if cur is not None and coord in out and not (overwrite and not _is_formula(cur)):
+            continue
+        if axis == "col":
+            out[coord] = _shift_formula(formula, row - seed_row, 0)
+        else:
+            out[coord] = _shift_formula(formula, 0, col - seed_col)
+
+
+def expand_formulas(expected: list[tuple[str, str]], given: dict[str, object]) -> dict[str, object]:
+    """Fill the dominant axis from a single relative formula. Overwrite junk only on long lines.
+
+    Tall ranges fill down only. Wide ranges fill right only. Never both — inventing a
+    second column from the first on a 2-col block is a common way to fail a pass.
+    """
+    out = dict(given)
+    by_col: dict[tuple[str | None, str], list[tuple[str, int, int]]] = {}
+    by_row: dict[tuple[str | None, int], list[tuple[str, int, int]]] = {}
+    for sheet, coord in expected:
+        col, row = _col_row(coord)
+        item = (coord, row, _col_index(col))
+        by_col.setdefault((sheet, col), []).append(item)
+        by_row.setdefault((sheet, row), []).append(item)
+    sheets = {sheet for sheet, _ in by_col} | {sheet for sheet, _ in by_row}
+    for sheet in sheets:
+        col_groups = [cells for (s, _), cells in by_col.items() if s == sheet]
+        row_groups = [cells for (s, _), cells in by_row.items() if s == sheet]
+        max_col = max((len(g) for g in col_groups), default=0)
+        max_row = max((len(g) for g in row_groups), default=0)
+        if max_col >= max_row:
+            for cells in col_groups:
+                cells.sort(key=lambda item: item[1])
+                _expand_line(out, cells, "col")
+        else:
+            for cells in row_groups:
+                cells.sort(key=lambda item: item[2])
+                _expand_line(out, cells, "row")
+    return out
+
+
+def output_is_thin(task: dict, out_path: Path) -> bool:
+    """True when a large range was barely written. Small tasks never retry — they already pass."""
+    if not out_path.exists():
+        return True
+    pred = openpyxl.load_workbook(out_path)
+    init = openpyxl.load_workbook(task["init_xlsx"])
+    try:
+        expected = list(answer_cells(task, pred))
+        if len(expected) <= 20:
+            return False
+        wrote = 0
+        for sheet, coord in expected:
+            pws = pred[sheet] if sheet and sheet in pred.sheetnames else pred.active
+            iws = init[sheet] if sheet and sheet in init.sheetnames else init.active
+            pv, iv = pws[coord].value, iws[coord].value
+            if _is_formula(pv) or (pv is not None and pv != iv):
+                wrote += 1
+        return wrote < max(2, int(0.35 * len(expected)))
+    finally:
+        pred.close()
+        init.close()
 
 
 def write_output(task: dict, answer: SpreadsheetAnswer, out_path: Path) -> None:
     shutil.copy(task["init_xlsx"], out_path)
     wb = openpyxl.load_workbook(out_path)
     aligned = align_answer(task, answer, wb)
-    cells = {cell.cell.upper(): cell.value for cell in aligned.cells}
-    for sheet, coord in answer_cells(task, wb):
+    expected = list(answer_cells(task, wb))
+    cells = {cell.cell.upper(): normalize_formula(cell.value) if isinstance(cell.value, str) else cell.value for cell in aligned.cells}
+    cells = expand_formulas(expected, cells)
+    for sheet, coord in expected:
         ws = wb[sheet] if sheet and sheet in wb.sheetnames else wb.active
         if coord in cells:
             set_cell_value(ws, coord, cells[coord])
@@ -168,7 +401,7 @@ def log(out_dir: Path, line: str) -> None:
 
 
 async def predict_task(complete, model: str, task: dict, out_dir: Path) -> str:
-    """One model call, retry once on bad JSON. On total failure copy the init workbook.
+    """One model call, retry on bad JSON or a too-thin fill. On total failure copy the init workbook.
 
     `complete(prompt)` is an async function returning (text, input_tokens, output_tokens).
     """
@@ -176,7 +409,9 @@ async def predict_task(complete, model: str, task: dict, out_dir: Path) -> str:
     prompt = build_prompt(task)
     status = "ok"
     last_error: Exception | None = None
-    for step, extra in enumerate(("", RETRY_HINT), start=1):
+    extra = ""
+    wrote_ok = False
+    for step in range(1, 3):
         trace = {"step": step, "model": model, "prompt": None, "response": None,
                  "input_tokens": None, "output_tokens": None, "latency_ms": None, "error": None}
         started = time.time()
@@ -186,22 +421,38 @@ async def predict_task(complete, model: str, task: dict, out_dir: Path) -> str:
             trace["response"] = text
             write_output(task, parse_answer(text), out)
             last_error = None
+            wrote_ok = True
             status = "ok"
+            if output_is_thin(task, out):
+                trace["error"] = "thin fill"
+                extra = THIN_HINT
+            else:
+                extra = ""
         except Exception as e:
             last_error = e
             trace["error"] = f"{type(e).__name__}: {e}"[:500]
             status = f"error: {e}"[:200]
+            extra = RETRY_HINT
         trace["latency_ms"] = int((time.time() - started) * 1000)
         append_jsonl(out_dir / "traces" / f"{task['id']}.jsonl", trace)
-        if last_error is None:
+        if last_error is None and extra == "":
             break
-    if last_error is not None:
+    if last_error is not None and not wrote_ok:
         shutil.copy(task["init_xlsx"], out)
     append_jsonl(out_dir / "predictions.jsonl", {"id": task["id"], "output": f"outputs/{task['id']}.xlsx", "status": status})
     return status
 
 
-async def run(complete, model: str, tasks: list[dict], out_dir: Path, concurrency: int, resume: bool = False) -> None:
+async def run(
+    complete,
+    model: str,
+    tasks: list[dict],
+    out_dir: Path,
+    concurrency: int,
+    resume: bool = False,
+    agent: str = "auto",
+    complete_chat=None,
+) -> None:
     if resume and (out_dir / "predictions.jsonl").exists():
         done = {row["id"] for row in read_jsonl(out_dir / "predictions.jsonl")}
         tasks = [task for task in tasks if task["id"] not in done]
@@ -210,14 +461,26 @@ async def run(complete, model: str, tasks: list[dict], out_dir: Path, concurrenc
         log(out_dir, f"resume skip {len(done)}  remaining {len(tasks)}")
     else:
         prepare_out_dir(out_dir)
-    log(out_dir, f"model {model}  tasks {len(tasks)}")
+    log(out_dir, f"model {model}  tasks {len(tasks)}  agent={agent}")
     if not tasks:
         return
     semaphore = asyncio.Semaphore(concurrency)
 
     async def run_one(task: dict) -> None:
-        async with semaphore:
-            status = await predict_task(complete, model, task, out_dir)
+        try:
+            async with semaphore:
+                if agent == "off":
+                    status = await predict_task(complete, model, task, out_dir)
+                else:
+                    from agent import predict_routed
+
+                    status = await predict_routed(complete, complete_chat, model, task, out_dir, agent)
+        except Exception as e:
+            status = f"error: {type(e).__name__}: {e}"[:200]
+            append_jsonl(
+                out_dir / "predictions.jsonl",
+                {"id": task["id"], "output": f"outputs/{task['id']}.xlsx", "status": status},
+            )
         log(out_dir, f"{task['id']:<8} {status}")
 
     await asyncio.gather(*(run_one(task) for task in tasks))

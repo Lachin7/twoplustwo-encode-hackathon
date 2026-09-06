@@ -1,0 +1,8 @@
+{"id": "280-17", "output": "outputs/280-17.xlsx", "status": "ok", "mode": "agent"}
+{"id": "384-4", "output": "outputs/384-4.xlsx", "status": "ok"}
+{"id": "97-36", "output": "outputs/97-36.xlsx", "status": "ok", "mode": "agent"}
+{"id": "39903", "output": "outputs/39903.xlsx", "status": "ok"}
+{"id": "40478", "output": "outputs/40478.xlsx", "status": "ok"}
+{"id": "22-47", "output": "outputs/22-47.xlsx", "status": "ok", "mode": "agent"}
+{"id": "48643", "output": "outputs/48643.xlsx", "status": "ok", "mode": "agent"}
+{"id": "49667", "output": "outputs/49667.xlsx", "status": "error: no tool or JSON in reply: 'Now I have the actual data. Let me analyze it.\\n\\nRow 1 headers: F1=08:00 ... AT1=18:00. These are stored as strings like '", "mode": "agent"}

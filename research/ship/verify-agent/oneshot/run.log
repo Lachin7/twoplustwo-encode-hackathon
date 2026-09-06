@@ -1,0 +1,9 @@
+model Qwen/Qwen3.8-27B renderer=qwen3_8_xhigh_reasoning  tasks 8  agent=off
+22-47    ok
+384-4    ok
+97-36    ok
+280-17   error: Expecting property name enclosed in double quotes: line 1 column 2 (char 1)
+39903    ok
+40478    ok
+48643    ok
+49667    error: Expecting property name enclosed in double quotes: line 1 column 2 (char 1)

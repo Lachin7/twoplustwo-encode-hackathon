@@ -40,6 +40,21 @@ def parse_args() -> argparse.Namespace:
     p.add_argument("--max-length", type=int, default=16384)
     p.add_argument("--epochs", type=int, default=1)
     p.add_argument("--all-train", action="store_true", help="do not drop huge / non-train-small rows")
+    p.add_argument(
+        "--raw-jsonl",
+        action="store_true",
+        help="use --jsonl as-is (no train-small filter). For 912 pools.",
+    )
+    p.add_argument(
+        "--load-checkpoint",
+        help="tinker://.../weights/final to continue from (e.g. the 286 oracle LoRA)",
+    )
+    p.add_argument(
+        "--train-on-what",
+        choices=("last_assistant_message", "all_assistant_messages"),
+        default="last_assistant_message",
+        help="all_assistant_messages for agent tool traces; last for one-shot JSON",
+    )
     p.add_argument("--log-path", default=str(ROOT / "train" / "logs" / "sft-small"))
     return p.parse_args()
 
@@ -87,14 +102,16 @@ def main() -> None:
     if not jsonl.exists():
         raise SystemExit(f"missing {jsonl}; run train/teacher_label.py --oracle")
     renderer_name = args.renderer or get_recommended_renderer_name(args.model)
-    if not args.all_train:
+    if args.raw_jsonl:
+        pass
+    elif not args.all_train:
         jsonl = filter_train_small(jsonl, Path(args.manifest), Path(args.split), SFT_SMALL_JSONL, args.max_length)
     common = ChatDatasetBuilderCommonConfig(
         model_name_for_tokenizer=args.model,
         renderer_name=renderer_name,
         max_length=args.max_length,
         batch_size=args.batch_size,
-        train_on_what=TrainOnWhat.LAST_ASSISTANT_MESSAGE,
+        train_on_what=TrainOnWhat(args.train_on_what),
     )
     config = train.Config(
         log_path=args.log_path,
@@ -108,8 +125,12 @@ def main() -> None:
         lora_rank=args.lora_rank,
         eval_every=0,
         save_every=20,
+        load_checkpoint_path=args.load_checkpoint,
     )
-    print(f"sft {args.model} renderer={renderer_name} rank={args.lora_rank} lr={args.lr} data={jsonl}")
+    print(
+        f"sft {args.model} renderer={renderer_name} rank={args.lora_rank} lr={args.lr} "
+        f"train_on={args.train_on_what} data={jsonl} load={args.load_checkpoint or 'base'}"
+    )
     asyncio.run(train.main(config))
 
 

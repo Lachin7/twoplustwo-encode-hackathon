@@ -1,0 +1,9 @@
+model Qwen/Qwen3.8-27B renderer=qwen3_8_xhigh_reasoning  tasks 8  agent=auto
+280-17   ok
+384-4    ok
+97-36    ok
+39903    ok
+40478    ok
+22-47    ok
+48643    ok
+49667    error: no tool or JSON in reply: 'Now I have the actual data. Let me analyze it.\n\nRow 1 headers: F1=08:00 ... AT1=18:00. These are stored as strings like '

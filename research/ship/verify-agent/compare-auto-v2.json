@@ -1,0 +1,49 @@
+{
+  "oneshot": {
+    "items": 8,
+    "graded": 8,
+    "missing": 0,
+    "errors": 0,
+    "pass_rate": 0.5,
+    "cell_accuracy": 0.6738,
+    "pass_rate_cell_level": 0.75,
+    "pass_rate_sheet_level": 0.25
+  },
+  "auto-v2": {
+    "items": 8,
+    "graded": 8,
+    "missing": 0,
+    "errors": 0,
+    "pass_rate": 0.75,
+    "cell_accuracy": 0.8128,
+    "pass_rate_cell_level": 0.75,
+    "pass_rate_sheet_level": 0.75
+  },
+  "prev_auto": {
+    "items": 8,
+    "graded": 8,
+    "missing": 0,
+    "errors": 0,
+    "pass_rate": 0.75,
+    "cell_accuracy": 0.8128,
+    "pass_rate_cell_level": 0.75,
+    "pass_rate_sheet_level": 0.75
+  },
+  "helped": [
+    "280-17",
+    "97-36"
+  ],
+  "damaged": [],
+  "vs_prev_helped": [],
+  "vs_prev_damaged": [],
+  "ids": [
+    "39903",
+    "40478",
+    "384-4",
+    "280-17",
+    "97-36",
+    "49667",
+    "48643",
+    "22-47"
+  ]
+}
